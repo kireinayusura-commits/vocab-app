@@ -1,0 +1,170 @@
+id,book,section,type,category,question,answer,choice1,choice2,choice3,note,example,example_ja,example_answer
+1,試験によく出る単語,P.19 反対語,word,形容詞,fat,太った,,,,,,,
+2,試験によく出る単語,P.19 反対語,word,形容詞,thin,細い・薄い,,,,,,,
+3,試験によく出る単語,P.19 反対語,word,形容詞,female,女性の,,,,,,,
+4,試験によく出る単語,P.19 反対語,word,形容詞,male,男性の,,,,,,,
+5,試験によく出る単語,P.19 反対語,word,形容詞,married,既婚の,,,,,,,
+6,試験によく出る単語,P.19 反対語,word,形容詞,single,独身の・未婚の,,,,,,,
+7,試験によく出る単語,P.19 名詞,word,名詞,ability,能力,,,,,,,
+8,試験によく出る単語,P.19 名詞,word,名詞,activity,活動,,,,,,,
+9,試験によく出る単語,P.19 名詞,word,名詞,aisle,(座席間の)通路,,,,,,,
+10,試験によく出る単語,P.19 名詞,word,名詞,appearance,外観・出現,,,,,,,
+11,試験によく出る単語,P.19 名詞,word,名詞,average,平均,,,,,,,
+12,試験によく出る単語,P.19 名詞,word,名詞,closet,クローゼット,,,,,,,
+13,試験によく出る単語,P.19 名詞,word,名詞,distance,距離,,,,,,,
+14,試験によく出る単語,P.19 名詞,word,名詞,illness,病気,,,,,,,
+15,試験によく出る単語,P.19 名詞,word,名詞,injury,けが,,,,,,,
+16,試験によく出る単語,P.19 名詞,word,名詞,knowledge,知識,,,,,,,
+17,試験によく出る単語,P.19 名詞,word,名詞,opportunity,機会,,,,,,,
+18,試験によく出る単語,P.19 名詞,word,名詞,point,要点,,,,,,,
+19,試験によく出る単語,P.19 名詞,word,名詞,progress,進展・進歩,,,,,,,
+20,試験によく出る単語,P.19 名詞,word,名詞,rule,規則・ルール,,,,,,,
+21,試験によく出る単語,P.19 名詞,word,名詞,skill,技術,,,,,,,
+22,試験によく出る単語,P.19 名詞,word,名詞,title,題名,,,,,,,
+23,試験によく出る単語,P.19 名詞,word,名詞,treasure,宝物,,,,,,,
+24,試験によく出る単語,P.19 名詞,word,名詞,waste,廃棄物・浪費,,,,,,,
+25,試験によく出る単語,P.19 名詞,word,名詞,access,利用する権利・機会,,,,,,,
+26,試験によく出る単語,P.19 名詞,word,名詞,advantage,有利・利点,,,,,,,
+27,試験によく出る単語,P.19 名詞,word,名詞,amount,量,,,,,,,
+28,試験によく出る単語,P.19 名詞,word,名詞,assistant,助手,,,,,,,
+29,試験によく出る単語,P.19 名詞,word,名詞,career,職業・経歴,,,,,,,
+30,試験によく出る単語,P.19 名詞,word,名詞,direction,方向・指示,,,,,,,
+31,試験によく出る単語,P.19 名詞,word,名詞,flavor,風味,,,,,,,
+32,試験によく出る単語,P.19 名詞,word,名詞,impression,印象,,,,,,,
+33,試験によく出る単語,P.19 名詞,word,名詞,instruction,指示,,,,,,,
+34,試験によく出る単語,P.19 名詞,word,名詞,matter,問題・事柄,,,,,,,
+35,試験によく出る単語,P.19 名詞,word,名詞,payment,支払い,,,,,,,
+36,試験によく出る単語,P.19 名詞,word,名詞,pressure,圧力・重圧,,,,,,,
+37,試験によく出る単語,P.19 名詞,word,名詞,risk,危険,,,,,,,
+38,試験によく出る単語,P.19 名詞,word,名詞,service,奉仕・役に立つこと,,,,,,,
+39,試験によく出る単語,P.19 名詞,word,名詞,strength,力,,,,,,,
+40,試験によく出る単語,P.19 名詞,word,名詞,translation,翻訳,,,,,,,
+41,試験によく出る単語,P.19 名詞,word,名詞,use,使用・役に立つこと,,,,,,,
+42,試験によく出る単語,P.19 名詞,word,名詞,weight,重さ・体重,,,,,,,
+43,試験によく出る単語,P.19 副詞,word,副詞,immediately,直ちに,,,,,,,
+44,試験によく出る単語,P.19 副詞,word,副詞,nearly,ほとんど・もう少しで,,,,,,,
+45,試験によく出る単語,P.19 副詞,word,副詞,outdoors,屋外で,,,,,,,
+46,試験によく出る単語,P.19 副詞,word,副詞,shortly,手短に・つまり,,,,,,,
+47,試験によく出る単語,P.19 副詞,word,副詞,wholly,完全に,,,,,,,
+48,試験によく出る単語,P.19 副詞,word,副詞,indoors,屋内で,,,,,,,
+49,試験によく出る単語,P.19 副詞,word,副詞,neither,〜もまた…ない,,,,,,,
+50,試験によく出る単語,P.19 副詞,word,副詞,perhaps,たぶん,,,,,,,
+51,試験によく出る単語,P.19 副詞,word,副詞,upstairs,階上・二階で,,,,,,,
+52,試験によく出る単語,P.19 副詞,word,副詞,worldwide,世界中で,,,,,,,
+53,試験によく出る単語,P.19 副詞,word,副詞,abroad,外国で,,,,,,,
+54,試験によく出る単語,P.19 副詞,word,副詞,overseas,海外へ,,,,,,,
+55,試験によく出る単語,P.19 副詞,word,副詞,already,(肯定文で)すでに,,,,,,,
+56,試験によく出る単語,P.19 副詞,word,副詞,yet,(否定文で)まだ・(疑問文で)もう,,,,,,,
+57,試験によく出る単語,P.19 副詞,word,副詞,lately,近ごろ,,,,,,,
+58,試験によく出る単語,P.19 副詞,word,副詞,recently,最近,,,,,,,
+59,試験によく出る単語,P.19 副詞,word,副詞,rarely,たまにしか〜しない,,,,,,,
+60,試験によく出る単語,P.19 副詞,word,副詞,seldom,めったに〜ない,,,,,,,
+61,試験によく出る単語,P.19 接続詞,word,接続詞,although,〜ではあるが,,,,,,,
+62,試験によく出る単語,P.19 接続詞,word,接続詞,however,しかしながら,,,,,,,
+63,試験によく出る単語,P.19 接続詞,word,接続詞,nor,〜もまた…ない,,,,,,,
+64,試験によく出る単語,P.19 接続詞,word,接続詞,than,〜よりも,,,,,,,
+65,試験によく出る単語,P.19 接続詞,word,接続詞,until,〜するまで(ずっと),,,,,,,
+66,試験によく出る単語,P.18 動詞,word,動詞,ache,(体の一部が)痛む,,,,,,,
+67,試験によく出る単語,P.18 動詞,word,動詞,allow,許す,,,,,,,
+68,試験によく出る単語,P.18 動詞,word,動詞,attack,襲う,,,,,,,
+69,試験によく出る単語,P.18 動詞,word,動詞,bend,曲げる,,,,,,,
+70,試験によく出る単語,P.18 動詞,word,動詞,bother,困らせる,,,,,,,
+71,試験によく出る単語,P.18 動詞,word,動詞,breathe,呼吸する,,,,,,,
+72,試験によく出る単語,P.18 動詞,word,動詞,conclude,結論を下す,,,,,,,
+73,試験によく出る単語,P.18 動詞,word,動詞,contain,含む,,,,,,,
+74,試験によく出る単語,P.18 動詞,word,動詞,correct,訂正する,,,,,,,
+75,試験によく出る単語,P.18 動詞,word,動詞,destroy,破壊する,,,,,,,
+76,試験によく出る単語,P.18 動詞,word,動詞,dig,掘る,,,,,,,
+77,試験によく出る単語,P.18 動詞,word,動詞,discuss,議論する,,,,,,,
+78,試験によく出る単語,P.18 動詞,word,動詞,divide,分割する,,,,,,,
+79,試験によく出る単語,P.18 動詞,word,動詞,escape,逃げる,,,,,,,
+80,試験によく出る単語,P.18 動詞,word,動詞,expect,予期[期待]する,,,,,,,
+81,試験によく出る単語,P.18 動詞,word,動詞,govern,統治する,,,,,,,
+82,試験によく出る単語,P.18 動詞,word,動詞,include,含む,,,,,,,
+83,試験によく出る単語,P.18 動詞,word,動詞,lead,案内する・導く,,,,,,,
+84,試験によく出る単語,P.18 動詞,word,動詞,maintain,維持する,,,,,,,
+85,試験によく出る単語,P.18 動詞,word,動詞,melt,溶ける,,,,,,,
+86,試験によく出る単語,P.18 動詞,word,動詞,overcome,克服する・打ち勝つ,,,,,,,
+87,試験によく出る単語,P.18 動詞,word,動詞,prefer,(〜よりも)好む,,,,,,,
+88,試験によく出る単語,P.18 動詞,word,動詞,produce,生み出す・製造する,,,,,,,
+89,試験によく出る単語,P.18 動詞,word,動詞,quit,やめる,,,,,,,
+90,試験によく出る単語,P.18 動詞,word,動詞,raise,持ち上げる,,,,,,,
+91,試験によく出る単語,P.18 動詞,word,動詞,recycle,再利用する,,,,,,,
+92,試験によく出る単語,P.18 動詞,word,動詞,reduce,減らす,,,,,,,
+93,試験によく出る単語,P.18 動詞,word,動詞,remain,〜のままである,,,,,,,
+94,試験によく出る単語,P.18 動詞,word,動詞,remind,思い出させる,,,,,,,
+95,試験によく出る単語,P.18 動詞,word,動詞,remove,取り除く,,,,,,,
+96,試験によく出る単語,P.18 動詞,word,動詞,search,捜索する・探す,,,,,,,
+97,試験によく出る単語,P.18 動詞,word,動詞,share,共有する,,,,,,,
+98,試験によく出る単語,P.18 動詞,word,動詞,spell,つづる,,,,,,,
+99,試験によく出る単語,P.18 動詞,word,動詞,tremble,震える,,,,,,,
+100,試験によく出る単語,P.18 動詞,word,動詞,warn,警告する,,,,,,,
+101,試験によく出る単語,P.18 動詞,word,動詞,wonder,不思議に思う,,,,,,,
+102,試験によく出る単語,P.18 形容詞,word,形容詞,absent,不在の,,,,,,,
+103,試験によく出る単語,P.18 形容詞,word,形容詞,available,利用可能な,,,,,,,
+104,試験によく出る単語,P.18 形容詞,word,形容詞,basic,基礎の・基本的な,,,,,,,
+105,試験によく出る単語,P.18 形容詞,word,形容詞,central,中心の・中心的な,,,,,,,
+106,試験によく出る単語,P.18 形容詞,word,形容詞,diligent,勤勉な,,,,,,,
+107,試験によく出る単語,P.18 形容詞,word,形容詞,eager,熱心な,,,,,,,
+108,試験によく出る単語,P.18 形容詞,word,形容詞,educational,教育の,,,,,,,
+109,試験によく出る単語,P.18 形容詞,word,形容詞,electronic,電子の,,,,,,,
+110,試験によく出る単語,P.18 形容詞,word,形容詞,foreign,外国の,,,,,,,
+111,試験によく出る単語,P.18 形容詞,word,形容詞,fresh,新鮮な,,,,,,,
+112,試験によく出る単語,P.18 形容詞,word,形容詞,global,地球上の・全世界の,,,,,,,
+113,試験によく出る単語,P.18 形容詞,word,形容詞,handsome,ハンサムな,,,,,,,
+114,試験によく出る単語,P.18 形容詞,word,形容詞,healthy,健康な・健康的な,,,,,,,
+115,試験によく出る単語,P.18 形容詞,word,形容詞,holy,神聖な,,,,,,,
+116,試験によく出る単語,P.18 形容詞,word,形容詞,human,人間の,,,,,,,
+117,試験によく出る単語,P.18 形容詞,word,形容詞,innocent,無罪の・潔白な,,,,,,,
+118,試験によく出る単語,P.18 形容詞,word,形容詞,jealous,嫉妬深い,,,,,,,
+119,試験によく出る単語,P.18 形容詞,word,形容詞,lazy,怠惰な,,,,,,,
+120,試験によく出る単語,P.18 形容詞,word,形容詞,original,独自の・元の,,,,,,,
+121,試験によく出る単語,P.18 形容詞,word,形容詞,private,個人的な・私的な,,,,,,,
+122,試験によく出る単語,P.18 形容詞,word,形容詞,suitable,適した,,,,,,,
+123,試験によく出る単語,P.18 形容詞,word,形容詞,upright,垂直の・まっすぐな,,,,,,,
+124,試験によく出る単語,P.18 形容詞,word,形容詞,various,さまざまな,,,,,,,
+125,試験によく出る単語,P.18 形容詞,word,形容詞,whole,全体の,,,,,,,
+126,試験によく出る単語,P.18 形容詞,word,形容詞,certain,確信して,,,,,,,
+127,試験によく出る単語,P.18 形容詞,word,形容詞,sure,自信があって,,,,,,,
+128,試験によく出る単語,P.18 形容詞,word,形容詞,few,(数について)少ない,,,,,,,
+129,試験によく出る単語,P.18 形容詞,word,形容詞,little,(量について)ほんのわずかな,,,,,,,
+130,試験によく出る単語,P.18 形容詞,word,形容詞,both,両方の,,,,,,,
+131,試験によく出る単語,P.18 形容詞,word,形容詞,either,どちらか一方の,,,,,,,
+132,試験によく出る熟語,P.32 名詞・形容詞,idiom,熟語,at the risk of ~,〜の危険を冒して,,,,,He kept working at the risk of ____ his health.,彼は健康を犠牲にする危険を冒して働き続けた。,at the risk of
+133,試験によく出る熟語,P.32 名詞・形容詞,idiom,熟語,do A a favor,A(人)の頼みを聞いてあげる,,,,,Could you ____ and close the window?,窓を閉めてくれませんか。,do me a favor
+134,試験によく出る熟語,P.32 名詞・形容詞,idiom,熟語,in shape,(体調について)よい調子で,,,,,My grandfather is still ____ for his age.,祖父は年齢の割にまだ調子がよい。,in shape
+135,試験によく出る熟語,P.32 名詞・形容詞,idiom,熟語,make oneself at home,くつろぐ,,,,,Please come in and ____.,どうぞ入ってくつろいでください。,make yourself at home
+136,試験によく出る熟語,P.32 名詞・形容詞,idiom,熟語,none of one's business,〜には関係ないことだ,,,,,Where I go is ____.,私がどこへ行こうと君には関係ない。,none of your business
+137,試験によく出る熟語,P.32 名詞・形容詞,idiom,熟語,on average,平均で,,,,,I read about two books a month ____.,私は平均で月に2冊ほど本を読む。,on average
+138,試験によく出る熟語,P.32 名詞・形容詞,idiom,熟語,on purpose,わざと・故意に,,,,,He broke the toy ____.,彼はわざとおもちゃを壊した。,on purpose
+139,試験によく出る熟語,P.32 名詞・形容詞,idiom,熟語,out of order,故障して,,,,,The elevator is ____ today.,エレベーターは今日は故障している。,out of order
+140,試験によく出る熟語,P.32 形容詞・副詞,idiom,熟語,as well,その上・おまけに,,,,,She speaks French and Spanish ____.,彼女はフランス語、おまけにスペイン語も話す。,as well
+141,試験によく出る熟語,P.32 形容詞・副詞,idiom,熟語,be about to ~,まさに〜しようとしている,,,,,I was ____ leave when it started to rain.,出かけようとしたとき雨が降り出した。,about to
+142,試験によく出る熟語,P.32 形容詞・副詞,idiom,熟語,be capable of ~,〜の能力がある,,,,,She is ____ solving hard problems.,彼女は難問を解く能力がある。,capable of
+143,試験によく出る熟語,P.32 形容詞・副詞,idiom,熟語,be dependent on ~,〜に依存している,,,,,The town is ____ tourism.,その町は観光に依存している。,dependent on
+144,試験によく出る熟語,P.32 形容詞・副詞,idiom,熟語,be familiar with ~,〜に精通している,,,,,Are you ____ this software?,このソフトに精通していますか。,familiar with
+145,試験によく出る熟語,P.32 形容詞・副詞,idiom,熟語,be far from ~,決して〜ではない,,,,,Her answer was ____ perfect.,彼女の答えは決して完璧ではなかった。,far from
+146,試験によく出る熟語,P.32 形容詞・副詞,idiom,熟語,be full of ~,〜でいっぱいである,,,,,The box was ____ old photos.,その箱は古い写真でいっぱいだった。,full of
+147,試験によく出る熟語,P.32 形容詞・副詞,idiom,熟語,be responsible for ~,〜に対して責任がある,,,,,You are ____ your own choices.,自分の選択には自分で責任がある。,responsible for
+148,試験によく出る熟語,P.32 形容詞・副詞,idiom,熟語,be similar to ~,〜に似ている,,,,,Her voice is ____ her mother's.,彼女の声は母親に似ている。,similar to
+149,試験によく出る熟語,P.32 形容詞・副詞,idiom,熟語,so far,今までのところ,,,,,Everything has gone well ____.,今までのところすべて順調だ。,so far
+150,試験によく出る熟語,P.33 動詞,idiom,熟語,appeal to ~,〜の心に訴える,,,,,His music ____ young people.,彼の音楽は若者の心に訴える。,appeals to
+151,試験によく出る熟語,P.33 動詞,idiom,熟語,become accustomed to ~,〜に慣れる,,,,,I have ____ getting up early.,私は早起きに慣れた。,become accustomed to
+152,試験によく出る熟語,P.33 動詞,idiom,熟語,call off ~,〜を中止する・取りやめる,,,,,They had to ____ the game because of rain.,雨のため試合を中止せざるをえなかった。,call off
+153,試験によく出る熟語,P.33 動詞,idiom,熟語,fall asleep,眠りに落ちる,,,,,He ____ during the movie.,彼は映画の途中で眠りに落ちた。,fell asleep
+154,試験によく出る熟語,P.33 動詞,idiom,熟語,get over ~,〜を乗り越える・克服する,,,,,It took her weeks to ____ the cold.,彼女は風邪を治すのに数週間かかった。,get over
+155,試験によく出る熟語,P.33 動詞,idiom,熟語,get ready for ~,〜の準備をする,,,,,Please ____ the trip by tonight.,今夜までに旅行の準備をしてください。,get ready for
+156,試験によく出る熟語,P.33 動詞,idiom,熟語,go wrong,うまくいかない,,,,,Something may ____ if we rush.,急ぐと何かがうまくいかないかもしれない。,go wrong
+157,試験によく出る熟語,P.33 動詞,idiom,熟語,head for ~,〜に向かう,,,,,Let's ____ the station now.,もう駅に向かおう。,head for
+158,試験によく出る熟語,P.33 動詞,idiom,熟語,hear from ~,〜から連絡をもらう,,,,,I haven't ____ him in years.,何年も彼から連絡をもらっていない。,heard from
+159,試験によく出る熟語,P.33 動詞,idiom,熟語,keep ~ a secret,〜を秘密にする,,,,,We decided to ____.,私たちはそれを秘密にすることにした。,keep it a secret
+160,試験によく出る熟語,P.33 動詞,idiom,熟語,make out ~,〜を判読する,,,,,I can't ____ his handwriting.,彼の字は判読できない。,make out
+161,試験によく出る熟語,P.33 動詞,idiom,熟語,make sense of ~,〜を理解する,,,,,I can't ____ these directions.,この説明が理解できない。,make sense of
+162,試験によく出る熟語,P.33 動詞,idiom,熟語,participate in ~,〜に参加する,,,,,Many students ____ the contest.,多くの生徒がそのコンテストに参加した。,participated in
+163,試験によく出る熟語,P.33 動詞,idiom,熟語,put off ~,〜を延期する,,,,,They ____ the meeting until Friday.,彼らは会議を金曜まで延期した。,put off
+164,試験によく出る熟語,P.33 動詞,idiom,熟語,put up with ~,〜に耐える・我慢する,,,,,I can't ____ this noise.,この騒音には耐えられない。,put up with
+165,試験によく出る熟語,P.33 動詞,idiom,熟語,run out of ~,〜を使い果たす,,,,,We ____ milk this morning.,今朝牛乳を切らしてしまった。,ran out of
+166,試験によく出る熟語,P.33 動詞,idiom,熟語,stay away from ~,〜から離れている,,,,,Please ____ the edge.,端から離れていてください。,stay away from
+167,試験によく出る熟語,P.33 動詞,idiom,熟語,turn out to be ~,〜であることが判明する,,,,,The rumor ____ false.,そのうわさは嘘だと判明した。,turned out to be
+168,試験によく出る熟語,P.33 動詞,idiom,熟語,turn up,(不意に)現れる,,,,,He ____ at the party without notice.,彼は予告なくパーティーに現れた。,turned up
+169,試験によく出る熟語,P.33 動詞,idiom,熟語,wonder about ~,〜について思いをめぐらせる,,,,,I sometimes ____ my future.,私は時々自分の将来について思いをめぐらせる。,wonder about

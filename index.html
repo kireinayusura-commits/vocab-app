@@ -1,0 +1,1379 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<title>VOCAB — 英語トレーニング</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="VOCAB">
+<meta name="theme-color" content="#0c0d10">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0c0d10;--panel:#15171c;--panel-2:#1c1f26;--line:#2a2e38;
+    --ink:#f2f3f5;--sub:#8a909c;--gold:#c9a86a;--green:#3ddc84;--red:#ff5e57;--blue:#5aa9ff;
+    --sat:env(safe-area-inset-top,0px);--sab:env(safe-area-inset-bottom,0px);
+    --tabbar-h:56px;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;margin:0;padding:0;}
+  html{height:100%;}
+  body{
+    font-family:'Noto Sans JP',-apple-system,sans-serif;
+    background:var(--bg);color:var(--ink);min-height:100%;
+    overscroll-behavior-y:none;-webkit-user-select:none;user-select:none;
+    -webkit-text-size-adjust:100%;
+  }
+  input,textarea{-webkit-user-select:text;user-select:text;}
+  #screen{
+    max-width:520px;margin:0 auto;
+    padding:calc(var(--sat) + 14px) 20px calc(var(--tabbar-h) + var(--sab) + 28px);
+    min-height:100vh;
+  }
+  /* ---- large title ---- */
+  .lt-eyebrow{font-family:'Archivo';font-size:11px;letter-spacing:3px;color:var(--gold);text-transform:uppercase;margin-bottom:4px;}
+  .lt{font-size:28px;font-weight:700;letter-spacing:.3px;margin-bottom:4px;}
+  .lt-sub{font-size:13px;color:var(--sub);line-height:1.6;margin-bottom:20px;}
+
+  /* ---- tab bar ---- */
+  #tabbar{
+    position:fixed;left:0;right:0;bottom:0;z-index:50;
+    background:rgba(18,20,25,.92);-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);
+    border-top:1px solid var(--line);
+    display:flex;justify-content:space-around;
+    padding:6px 8px calc(6px + var(--sab));
+  }
+  .tab{flex:1;max-width:110px;display:flex;flex-direction:column;align-items:center;gap:3px;
+    background:none;border:none;color:var(--sub);cursor:pointer;padding:5px 0;border-radius:12px;
+    font-family:'Noto Sans JP';transition:color .15s;}
+  .tab svg{width:23px;height:23px;}
+  .tab span{font-size:10px;font-weight:500;letter-spacing:.5px;}
+  .tab.active{color:var(--gold);}
+
+  /* ---- cards / rows ---- */
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px;margin-bottom:14px;}
+  .card.hl{border-color:var(--gold);background:linear-gradient(180deg,#1d1c18,#15171c);}
+  .card h3{font-size:16px;font-weight:700;margin-bottom:6px;}
+  .card p{font-size:12.5px;color:var(--sub);line-height:1.65;}
+  .card .ic{font-family:'Archivo';font-weight:800;font-size:12px;letter-spacing:2px;color:var(--gold);margin-bottom:8px;text-transform:uppercase;}
+
+  .list{display:flex;flex-direction:column;gap:10px;}
+  .row{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:var(--panel);
+    border:1px solid var(--line);border-radius:14px;padding:15px 16px;cursor:pointer;
+    color:var(--ink);font-family:'Noto Sans JP';transition:border-color .15s,transform .08s;}
+  .row:active{transform:scale(.985);}
+  .row.accent{border-color:var(--gold);background:linear-gradient(180deg,#1d1c18,#15171c);}
+  .row-main{flex:1;min-width:0;}
+  .row-title{font-size:15px;font-weight:700;}
+  .row-sub{font-size:11.5px;color:var(--sub);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .row-arrow{color:var(--sub);font-size:17px;flex:none;}
+  .row.disabled{opacity:.38;pointer-events:none;}
+
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:11px;}
+  .set-card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:15px;
+    cursor:pointer;transition:transform .08s;}
+  .set-card:active{transform:scale(.97);}
+  .set-card h4{font-size:13.5px;font-weight:700;margin-bottom:5px;line-height:1.4;}
+  .set-card .cnt{font-size:11px;color:var(--sub);}
+  .set-card .cat{font-size:10px;color:var(--gold);letter-spacing:1px;margin-top:6px;text-transform:uppercase;font-family:'Archivo';}
+
+  .divider{display:flex;align-items:center;gap:13px;margin:22px 0 14px;}
+  .divider span{font-family:'Archivo';font-size:10.5px;letter-spacing:2px;color:var(--sub);text-transform:uppercase;white-space:nowrap;}
+  .divider:before,.divider:after{content:"";height:1px;background:var(--line);flex:1;}
+
+  .btn{width:100%;border:none;cursor:pointer;font-family:'Archivo';font-weight:700;font-size:13px;
+    letter-spacing:2px;text-transform:uppercase;padding:15px;border-radius:14px;transition:.15s;}
+  .btn:active{transform:scale(.985);}
+  .btn.primary{background:var(--gold);color:#0c0d10;}
+  .btn.danger{background:var(--red);color:#fff;}
+  .btn.ghost{background:transparent;color:var(--sub);border:1px solid var(--line);}
+  .btn+.btn{margin-top:10px;}
+
+  .navbar{display:flex;align-items:center;gap:10px;margin-bottom:16px;}
+  .back{background:none;border:1px solid var(--line);color:var(--sub);border-radius:10px;
+    padding:8px 13px;font-size:12.5px;cursor:pointer;font-family:'Noto Sans JP';}
+  .nav-title{font-size:12px;color:var(--sub);letter-spacing:.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;}
+  .nav-title b{color:var(--ink);}
+
+  /* ---- mastery ---- */
+  .lvl-badge{display:inline-flex;align-items:center;justify-content:center;font-family:'Archivo';
+    font-weight:800;font-size:10px;letter-spacing:.5px;border-radius:7px;padding:3px 8px;flex:none;}
+  .lvl-0{background:#23262e;color:var(--sub);}
+  .lvl-1{background:rgba(90,169,255,.14);color:var(--blue);}
+  .lvl-2{background:rgba(201,168,106,.15);color:var(--gold);}
+  .lvl-3{background:rgba(61,220,132,.14);color:var(--green);}
+  .mbar{display:flex;height:10px;border-radius:99px;overflow:hidden;background:var(--panel-2);margin:12px 0 8px;}
+  .mbar>div{height:100%;}
+  .mlegend{display:flex;flex-wrap:wrap;gap:10px 16px;font-size:11px;color:var(--sub);}
+  .mlegend .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;}
+
+  .stat-row{display:flex;border:1px solid var(--line);border-radius:14px;overflow:hidden;margin-bottom:14px;}
+  .stat-row .s{flex:1;padding:14px 6px;text-align:center;}
+  .stat-row .s+.s{border-left:1px solid var(--line);}
+  .stat-row .n{font-family:'Archivo';font-size:21px;font-weight:800;}
+  .stat-row .l{font-size:10px;color:var(--sub);letter-spacing:1px;text-transform:uppercase;margin-top:3px;}
+
+  /* ---- quiz ---- */
+  .track{height:4px;background:var(--panel-2);border-radius:99px;overflow:hidden;margin-bottom:6px;}
+  .track>div{height:100%;background:linear-gradient(90deg,#b8924f,var(--gold));transition:width .35s;}
+  .qmeta{display:flex;justify-content:space-between;font-family:'Archivo';font-size:11px;color:var(--sub);letter-spacing:1px;margin-bottom:20px;}
+  .qtag{font-family:'Archivo';font-size:11px;letter-spacing:2px;color:var(--gold);text-transform:uppercase;margin-bottom:14px;text-align:center;}
+  .qword-wrap{text-align:center;padding:8px 0 4px;animation:rise .35s cubic-bezier(.2,.8,.3,1);}
+  @keyframes rise{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:none;}}
+  .qword{font-family:'Archivo';font-weight:700;font-size:clamp(24px,7.5vw,38px);letter-spacing:.5px;line-height:1.2;word-break:break-word;}
+  .qsentence{font-size:clamp(16px,4.6vw,20px);font-weight:500;line-height:1.85;}
+  .qprompt-jp{font-size:13.5px;color:var(--sub);margin-top:11px;}
+  .cloze-gap{display:inline-block;min-width:62px;border-bottom:2px solid var(--gold);color:transparent;margin:0 4px;}
+  .mode-pill{font-size:10px;color:var(--gold);letter-spacing:1px;font-family:'Archivo';
+    border:1px solid var(--line);border-radius:7px;padding:3px 8px;white-space:nowrap;}
+  .audio-toggle{background:none;border:1px solid var(--line);color:var(--sub);border-radius:9px;
+    padding:6px 10px;font-size:12px;cursor:pointer;}
+  .audio-toggle.on{color:var(--gold);border-color:var(--gold);}
+
+  .speak{margin:14px auto 0;display:flex;align-items:center;gap:8px;background:var(--panel);
+    border:1px solid var(--line);color:var(--sub);border-radius:99px;padding:8px 17px;font-size:12px;
+    font-family:'Archivo';font-weight:700;letter-spacing:1px;cursor:pointer;}
+  .speak.playing{border-color:var(--gold);color:var(--gold);}
+  .speak svg{width:15px;height:15px;}
+  .speak.playing .wave{animation:pulse .7s ease-in-out infinite;}
+  @keyframes pulse{0%,100%{opacity:.4;}50%{opacity:1;}}
+
+  .opts{display:flex;flex-direction:column;gap:10px;margin-top:22px;}
+  .opt{display:flex;align-items:center;gap:13px;text-align:left;width:100%;background:var(--panel);
+    border:1px solid var(--line);border-radius:14px;padding:15px;color:var(--ink);font-size:15px;
+    font-weight:500;font-family:'Noto Sans JP';cursor:pointer;transition:.12s;}
+  .opt:active:not(:disabled){transform:scale(.985);}
+  .opt .k{font-family:'Archivo';font-weight:700;font-size:11.5px;width:23px;height:23px;flex:none;
+    display:flex;align-items:center;justify-content:center;border:1px solid var(--line);border-radius:7px;color:var(--sub);}
+  .opt.correct{background:rgba(61,220,132,.1);border-color:var(--green);}
+  .opt.correct .k{border-color:var(--green);color:var(--green);}
+  .opt.wrong{background:rgba(255,94,87,.1);border-color:var(--red);}
+  .opt.wrong .k{border-color:var(--red);color:var(--red);}
+  .opt.dim{opacity:.4;}
+  .opt:disabled{cursor:default;}
+
+  .spell-wrap{margin-top:22px;}
+  .spell-input{width:100%;background:var(--panel);border:1px solid var(--line);border-radius:14px;
+    padding:15px;color:var(--ink);font-size:19px;font-family:'Archivo';font-weight:600;
+    letter-spacing:1px;text-align:center;outline:none;}
+  .spell-input:focus{border-color:var(--gold);}
+  .spell-input.correct{border-color:var(--green);color:var(--green);}
+  .spell-input.wrong{border-color:var(--red);color:var(--red);}
+  .spell-submit{margin-top:12px;width:100%;border:none;cursor:pointer;font-family:'Archivo';font-weight:700;
+    font-size:13px;letter-spacing:2px;text-transform:uppercase;color:#0c0d10;padding:14px;border-radius:14px;background:var(--gold);}
+  .spell-submit:disabled{opacity:.4;}
+  .spell-help{margin-top:10px;width:100%;background:none;border:1px solid var(--line);color:var(--sub);
+    border-radius:14px;padding:12px;font-size:12.5px;font-family:'Noto Sans JP';cursor:pointer;}
+
+  .order-answer{min-height:52px;border:1px dashed var(--line);border-radius:14px;padding:11px;
+    display:flex;flex-wrap:wrap;gap:8px;margin-top:22px;background:var(--panel-2);}
+  .order-answer:empty:before{content:"ここに単語を並べます";color:var(--sub);font-size:13px;}
+  .order-bank{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;}
+  .chip{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:9px 13px;
+    font-size:15px;font-weight:600;cursor:pointer;font-family:'Noto Sans JP';}
+  .chip.used{opacity:.25;pointer-events:none;}
+  .chip.in-answer{border-color:var(--gold);}
+  .order-check{margin-top:16px;width:100%;border:none;cursor:pointer;font-family:'Archivo';font-weight:700;
+    font-size:13px;letter-spacing:2px;text-transform:uppercase;color:#0c0d10;padding:14px;border-radius:14px;background:var(--gold);}
+  .order-check:disabled{opacity:.4;}
+
+  .fb{min-height:18px;text-align:center;margin-top:16px;font-size:13px;font-weight:600;opacity:0;transition:.2s;line-height:1.6;}
+  .fb.show{opacity:1;}
+  .fb.ok{color:var(--green);}
+  .fb.no{color:var(--red);}
+  .fb .note{display:block;color:var(--sub);font-size:12px;font-weight:400;margin-top:3px;}
+  .next{width:100%;border:none;cursor:pointer;font-family:'Archivo';font-weight:700;
+    font-size:13.5px;letter-spacing:2px;text-transform:uppercase;color:#0c0d10;padding:16px;border-radius:14px;
+    background:var(--gold);opacity:0;pointer-events:none;transition:opacity .25s;margin-top:18px;}
+  .next.show{opacity:1;pointer-events:auto;}
+
+  /* ---- result ---- */
+  .result{text-align:center;animation:rise .4s;padding-top:8px;}
+  .ring{width:150px;height:150px;margin:8px auto 18px;position:relative;}
+  .ring svg{transform:rotate(-90deg);}
+  .ring .pct{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;}
+  .ring .pct b{font-family:'Archivo';font-size:38px;font-weight:800;}
+  .ring .pct small{font-size:10px;color:var(--sub);letter-spacing:2px;margin-top:3px;}
+  .res-msg{font-family:'Archivo';font-size:17px;font-weight:800;letter-spacing:2px;margin-bottom:5px;}
+  .res-sub{font-size:13px;color:var(--sub);margin-bottom:22px;line-height:1.6;}
+  .retry-note{font-size:12px;color:var(--gold);margin-bottom:12px;}
+
+  /* ---- forms / editor ---- */
+  .field{margin-bottom:13px;}
+  .field label{display:block;font-size:11px;color:var(--sub);letter-spacing:1px;margin-bottom:6px;font-family:'Archivo';text-transform:uppercase;}
+  .field input,.field select,.field textarea{width:100%;background:var(--panel);border:1px solid var(--line);
+    border-radius:12px;padding:12px 13px;color:var(--ink);font-size:15px;font-family:'Noto Sans JP';outline:none;}
+  .field input:focus,.field textarea:focus{border-color:var(--gold);}
+  .field input[type=date]{-webkit-appearance:none;min-height:46px;}
+  .search{width:100%;background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    padding:12px 14px;color:var(--ink);font-size:15px;font-family:'Noto Sans JP';outline:none;margin-bottom:13px;}
+  .toggle-row{display:flex;align-items:center;justify-content:space-between;background:var(--panel);
+    border:1px solid var(--line);border-radius:14px;padding:15px 16px;margin-bottom:11px;}
+  .toggle-row .t-main{flex:1;}
+  .toggle-row .t-title{font-size:14.5px;font-weight:700;}
+  .toggle-row .t-sub{font-size:11.5px;color:var(--sub);margin-top:2px;}
+  .switch{width:50px;height:30px;border-radius:99px;background:#2a2e38;border:none;position:relative;cursor:pointer;transition:.2s;flex:none;}
+  .switch:after{content:"";position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:50%;background:#8a909c;transition:.2s;}
+  .switch.on{background:var(--gold);}
+  .switch.on:after{left:23px;background:#0c0d10;}
+
+  .toast{position:fixed;left:50%;bottom:calc(var(--tabbar-h) + var(--sab) + 18px);transform:translateX(-50%) translateY(8px);
+    background:#23262e;border:1px solid var(--line);color:var(--ink);font-size:13px;padding:11px 20px;
+    border-radius:99px;opacity:0;pointer-events:none;transition:.25s;z-index:99;white-space:nowrap;}
+  .toast.show{opacity:1;transform:translateX(-50%);}
+  .empty{color:var(--sub);font-size:13px;text-align:center;padding:28px 0;line-height:1.7;}
+</style>
+</head>
+<body>
+<div id="screen"></div>
+<nav id="tabbar">
+  <button class="tab active" data-tab="home">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg><span>ホーム</span></button>
+  <button class="tab" data-tab="study">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/></svg><span>学習</span></button>
+  <button class="tab" data-tab="progress">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-7"/><path d="M22 20H2"/></svg><span>進捗</span></button>
+  <button class="tab" data-tab="settings">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.55-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.01a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.01a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.55 1z"/></svg><span>設定</span></button>
+</nav>
+<div class="toast" id="toast"></div>
+<input type="file" id="fileInput" accept=".csv,.xlsx,.xls" style="display:none">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
+<script>
+/* ================================================================
+   VOCAB PWA — Phase 1
+   data layer / mastery engine / quiz engine / 4-tab UI
+================================================================ */
+
+/* ---------- default data (replaced at build time) ---------- */
+const DEFAULT_CSV=`id,book,section,type,category,question,answer,choice1,choice2,choice3,note,example,example_ja,example_answer
+1,試験によく出る単語,P.19 反対語,word,形容詞,fat,太った,,,,,,,
+2,試験によく出る単語,P.19 反対語,word,形容詞,thin,細い・薄い,,,,,,,
+3,試験によく出る単語,P.19 反対語,word,形容詞,female,女性の,,,,,,,
+4,試験によく出る単語,P.19 反対語,word,形容詞,male,男性の,,,,,,,
+5,試験によく出る単語,P.19 反対語,word,形容詞,married,既婚の,,,,,,,
+6,試験によく出る単語,P.19 反対語,word,形容詞,single,独身の・未婚の,,,,,,,
+7,試験によく出る単語,P.19 名詞,word,名詞,ability,能力,,,,,,,
+8,試験によく出る単語,P.19 名詞,word,名詞,activity,活動,,,,,,,
+9,試験によく出る単語,P.19 名詞,word,名詞,aisle,(座席間の)通路,,,,,,,
+10,試験によく出る単語,P.19 名詞,word,名詞,appearance,外観・出現,,,,,,,
+11,試験によく出る単語,P.19 名詞,word,名詞,average,平均,,,,,,,
+12,試験によく出る単語,P.19 名詞,word,名詞,closet,クローゼット,,,,,,,
+13,試験によく出る単語,P.19 名詞,word,名詞,distance,距離,,,,,,,
+14,試験によく出る単語,P.19 名詞,word,名詞,illness,病気,,,,,,,
+15,試験によく出る単語,P.19 名詞,word,名詞,injury,けが,,,,,,,
+16,試験によく出る単語,P.19 名詞,word,名詞,knowledge,知識,,,,,,,
+17,試験によく出る単語,P.19 名詞,word,名詞,opportunity,機会,,,,,,,
+18,試験によく出る単語,P.19 名詞,word,名詞,point,要点,,,,,,,
+19,試験によく出る単語,P.19 名詞,word,名詞,progress,進展・進歩,,,,,,,
+20,試験によく出る単語,P.19 名詞,word,名詞,rule,規則・ルール,,,,,,,
+21,試験によく出る単語,P.19 名詞,word,名詞,skill,技術,,,,,,,
+22,試験によく出る単語,P.19 名詞,word,名詞,title,題名,,,,,,,
+23,試験によく出る単語,P.19 名詞,word,名詞,treasure,宝物,,,,,,,
+24,試験によく出る単語,P.19 名詞,word,名詞,waste,廃棄物・浪費,,,,,,,
+25,試験によく出る単語,P.19 名詞,word,名詞,access,利用する権利・機会,,,,,,,
+26,試験によく出る単語,P.19 名詞,word,名詞,advantage,有利・利点,,,,,,,
+27,試験によく出る単語,P.19 名詞,word,名詞,amount,量,,,,,,,
+28,試験によく出る単語,P.19 名詞,word,名詞,assistant,助手,,,,,,,
+29,試験によく出る単語,P.19 名詞,word,名詞,career,職業・経歴,,,,,,,
+30,試験によく出る単語,P.19 名詞,word,名詞,direction,方向・指示,,,,,,,
+31,試験によく出る単語,P.19 名詞,word,名詞,flavor,風味,,,,,,,
+32,試験によく出る単語,P.19 名詞,word,名詞,impression,印象,,,,,,,
+33,試験によく出る単語,P.19 名詞,word,名詞,instruction,指示,,,,,,,
+34,試験によく出る単語,P.19 名詞,word,名詞,matter,問題・事柄,,,,,,,
+35,試験によく出る単語,P.19 名詞,word,名詞,payment,支払い,,,,,,,
+36,試験によく出る単語,P.19 名詞,word,名詞,pressure,圧力・重圧,,,,,,,
+37,試験によく出る単語,P.19 名詞,word,名詞,risk,危険,,,,,,,
+38,試験によく出る単語,P.19 名詞,word,名詞,service,奉仕・役に立つこと,,,,,,,
+39,試験によく出る単語,P.19 名詞,word,名詞,strength,力,,,,,,,
+40,試験によく出る単語,P.19 名詞,word,名詞,translation,翻訳,,,,,,,
+41,試験によく出る単語,P.19 名詞,word,名詞,use,使用・役に立つこと,,,,,,,
+42,試験によく出る単語,P.19 名詞,word,名詞,weight,重さ・体重,,,,,,,
+43,試験によく出る単語,P.19 副詞,word,副詞,immediately,直ちに,,,,,,,
+44,試験によく出る単語,P.19 副詞,word,副詞,nearly,ほとんど・もう少しで,,,,,,,
+45,試験によく出る単語,P.19 副詞,word,副詞,outdoors,屋外で,,,,,,,
+46,試験によく出る単語,P.19 副詞,word,副詞,shortly,手短に・つまり,,,,,,,
+47,試験によく出る単語,P.19 副詞,word,副詞,wholly,完全に,,,,,,,
+48,試験によく出る単語,P.19 副詞,word,副詞,indoors,屋内で,,,,,,,
+49,試験によく出る単語,P.19 副詞,word,副詞,neither,〜もまた…ない,,,,,,,
+50,試験によく出る単語,P.19 副詞,word,副詞,perhaps,たぶん,,,,,,,
+51,試験によく出る単語,P.19 副詞,word,副詞,upstairs,階上・二階で,,,,,,,
+52,試験によく出る単語,P.19 副詞,word,副詞,worldwide,世界中で,,,,,,,
+53,試験によく出る単語,P.19 副詞,word,副詞,abroad,外国で,,,,,,,
+54,試験によく出る単語,P.19 副詞,word,副詞,overseas,海外へ,,,,,,,
+55,試験によく出る単語,P.19 副詞,word,副詞,already,(肯定文で)すでに,,,,,,,
+56,試験によく出る単語,P.19 副詞,word,副詞,yet,(否定文で)まだ・(疑問文で)もう,,,,,,,
+57,試験によく出る単語,P.19 副詞,word,副詞,lately,近ごろ,,,,,,,
+58,試験によく出る単語,P.19 副詞,word,副詞,recently,最近,,,,,,,
+59,試験によく出る単語,P.19 副詞,word,副詞,rarely,たまにしか〜しない,,,,,,,
+60,試験によく出る単語,P.19 副詞,word,副詞,seldom,めったに〜ない,,,,,,,
+61,試験によく出る単語,P.19 接続詞,word,接続詞,although,〜ではあるが,,,,,,,
+62,試験によく出る単語,P.19 接続詞,word,接続詞,however,しかしながら,,,,,,,
+63,試験によく出る単語,P.19 接続詞,word,接続詞,nor,〜もまた…ない,,,,,,,
+64,試験によく出る単語,P.19 接続詞,word,接続詞,than,〜よりも,,,,,,,
+65,試験によく出る単語,P.19 接続詞,word,接続詞,until,〜するまで(ずっと),,,,,,,
+66,試験によく出る単語,P.18 動詞,word,動詞,ache,(体の一部が)痛む,,,,,,,
+67,試験によく出る単語,P.18 動詞,word,動詞,allow,許す,,,,,,,
+68,試験によく出る単語,P.18 動詞,word,動詞,attack,襲う,,,,,,,
+69,試験によく出る単語,P.18 動詞,word,動詞,bend,曲げる,,,,,,,
+70,試験によく出る単語,P.18 動詞,word,動詞,bother,困らせる,,,,,,,
+71,試験によく出る単語,P.18 動詞,word,動詞,breathe,呼吸する,,,,,,,
+72,試験によく出る単語,P.18 動詞,word,動詞,conclude,結論を下す,,,,,,,
+73,試験によく出る単語,P.18 動詞,word,動詞,contain,含む,,,,,,,
+74,試験によく出る単語,P.18 動詞,word,動詞,correct,訂正する,,,,,,,
+75,試験によく出る単語,P.18 動詞,word,動詞,destroy,破壊する,,,,,,,
+76,試験によく出る単語,P.18 動詞,word,動詞,dig,掘る,,,,,,,
+77,試験によく出る単語,P.18 動詞,word,動詞,discuss,議論する,,,,,,,
+78,試験によく出る単語,P.18 動詞,word,動詞,divide,分割する,,,,,,,
+79,試験によく出る単語,P.18 動詞,word,動詞,escape,逃げる,,,,,,,
+80,試験によく出る単語,P.18 動詞,word,動詞,expect,予期[期待]する,,,,,,,
+81,試験によく出る単語,P.18 動詞,word,動詞,govern,統治する,,,,,,,
+82,試験によく出る単語,P.18 動詞,word,動詞,include,含む,,,,,,,
+83,試験によく出る単語,P.18 動詞,word,動詞,lead,案内する・導く,,,,,,,
+84,試験によく出る単語,P.18 動詞,word,動詞,maintain,維持する,,,,,,,
+85,試験によく出る単語,P.18 動詞,word,動詞,melt,溶ける,,,,,,,
+86,試験によく出る単語,P.18 動詞,word,動詞,overcome,克服する・打ち勝つ,,,,,,,
+87,試験によく出る単語,P.18 動詞,word,動詞,prefer,(〜よりも)好む,,,,,,,
+88,試験によく出る単語,P.18 動詞,word,動詞,produce,生み出す・製造する,,,,,,,
+89,試験によく出る単語,P.18 動詞,word,動詞,quit,やめる,,,,,,,
+90,試験によく出る単語,P.18 動詞,word,動詞,raise,持ち上げる,,,,,,,
+91,試験によく出る単語,P.18 動詞,word,動詞,recycle,再利用する,,,,,,,
+92,試験によく出る単語,P.18 動詞,word,動詞,reduce,減らす,,,,,,,
+93,試験によく出る単語,P.18 動詞,word,動詞,remain,〜のままである,,,,,,,
+94,試験によく出る単語,P.18 動詞,word,動詞,remind,思い出させる,,,,,,,
+95,試験によく出る単語,P.18 動詞,word,動詞,remove,取り除く,,,,,,,
+96,試験によく出る単語,P.18 動詞,word,動詞,search,捜索する・探す,,,,,,,
+97,試験によく出る単語,P.18 動詞,word,動詞,share,共有する,,,,,,,
+98,試験によく出る単語,P.18 動詞,word,動詞,spell,つづる,,,,,,,
+99,試験によく出る単語,P.18 動詞,word,動詞,tremble,震える,,,,,,,
+100,試験によく出る単語,P.18 動詞,word,動詞,warn,警告する,,,,,,,
+101,試験によく出る単語,P.18 動詞,word,動詞,wonder,不思議に思う,,,,,,,
+102,試験によく出る単語,P.18 形容詞,word,形容詞,absent,不在の,,,,,,,
+103,試験によく出る単語,P.18 形容詞,word,形容詞,available,利用可能な,,,,,,,
+104,試験によく出る単語,P.18 形容詞,word,形容詞,basic,基礎の・基本的な,,,,,,,
+105,試験によく出る単語,P.18 形容詞,word,形容詞,central,中心の・中心的な,,,,,,,
+106,試験によく出る単語,P.18 形容詞,word,形容詞,diligent,勤勉な,,,,,,,
+107,試験によく出る単語,P.18 形容詞,word,形容詞,eager,熱心な,,,,,,,
+108,試験によく出る単語,P.18 形容詞,word,形容詞,educational,教育の,,,,,,,
+109,試験によく出る単語,P.18 形容詞,word,形容詞,electronic,電子の,,,,,,,
+110,試験によく出る単語,P.18 形容詞,word,形容詞,foreign,外国の,,,,,,,
+111,試験によく出る単語,P.18 形容詞,word,形容詞,fresh,新鮮な,,,,,,,
+112,試験によく出る単語,P.18 形容詞,word,形容詞,global,地球上の・全世界の,,,,,,,
+113,試験によく出る単語,P.18 形容詞,word,形容詞,handsome,ハンサムな,,,,,,,
+114,試験によく出る単語,P.18 形容詞,word,形容詞,healthy,健康な・健康的な,,,,,,,
+115,試験によく出る単語,P.18 形容詞,word,形容詞,holy,神聖な,,,,,,,
+116,試験によく出る単語,P.18 形容詞,word,形容詞,human,人間の,,,,,,,
+117,試験によく出る単語,P.18 形容詞,word,形容詞,innocent,無罪の・潔白な,,,,,,,
+118,試験によく出る単語,P.18 形容詞,word,形容詞,jealous,嫉妬深い,,,,,,,
+119,試験によく出る単語,P.18 形容詞,word,形容詞,lazy,怠惰な,,,,,,,
+120,試験によく出る単語,P.18 形容詞,word,形容詞,original,独自の・元の,,,,,,,
+121,試験によく出る単語,P.18 形容詞,word,形容詞,private,個人的な・私的な,,,,,,,
+122,試験によく出る単語,P.18 形容詞,word,形容詞,suitable,適した,,,,,,,
+123,試験によく出る単語,P.18 形容詞,word,形容詞,upright,垂直の・まっすぐな,,,,,,,
+124,試験によく出る単語,P.18 形容詞,word,形容詞,various,さまざまな,,,,,,,
+125,試験によく出る単語,P.18 形容詞,word,形容詞,whole,全体の,,,,,,,
+126,試験によく出る単語,P.18 形容詞,word,形容詞,certain,確信して,,,,,,,
+127,試験によく出る単語,P.18 形容詞,word,形容詞,sure,自信があって,,,,,,,
+128,試験によく出る単語,P.18 形容詞,word,形容詞,few,(数について)少ない,,,,,,,
+129,試験によく出る単語,P.18 形容詞,word,形容詞,little,(量について)ほんのわずかな,,,,,,,
+130,試験によく出る単語,P.18 形容詞,word,形容詞,both,両方の,,,,,,,
+131,試験によく出る単語,P.18 形容詞,word,形容詞,either,どちらか一方の,,,,,,,
+132,試験によく出る熟語,P.32 名詞・形容詞,idiom,熟語,at the risk of ~,〜の危険を冒して,,,,,He kept working at the risk of ____ his health.,彼は健康を犠牲にする危険を冒して働き続けた。,at the risk of
+133,試験によく出る熟語,P.32 名詞・形容詞,idiom,熟語,do A a favor,A(人)の頼みを聞いてあげる,,,,,Could you ____ and close the window?,窓を閉めてくれませんか。,do me a favor
+134,試験によく出る熟語,P.32 名詞・形容詞,idiom,熟語,in shape,(体調について)よい調子で,,,,,My grandfather is still ____ for his age.,祖父は年齢の割にまだ調子がよい。,in shape
+135,試験によく出る熟語,P.32 名詞・形容詞,idiom,熟語,make oneself at home,くつろぐ,,,,,Please come in and ____.,どうぞ入ってくつろいでください。,make yourself at home
+136,試験によく出る熟語,P.32 名詞・形容詞,idiom,熟語,none of one's business,〜には関係ないことだ,,,,,Where I go is ____.,私がどこへ行こうと君には関係ない。,none of your business
+137,試験によく出る熟語,P.32 名詞・形容詞,idiom,熟語,on average,平均で,,,,,I read about two books a month ____.,私は平均で月に2冊ほど本を読む。,on average
+138,試験によく出る熟語,P.32 名詞・形容詞,idiom,熟語,on purpose,わざと・故意に,,,,,He broke the toy ____.,彼はわざとおもちゃを壊した。,on purpose
+139,試験によく出る熟語,P.32 名詞・形容詞,idiom,熟語,out of order,故障して,,,,,The elevator is ____ today.,エレベーターは今日は故障している。,out of order
+140,試験によく出る熟語,P.32 形容詞・副詞,idiom,熟語,as well,その上・おまけに,,,,,She speaks French and Spanish ____.,彼女はフランス語、おまけにスペイン語も話す。,as well
+141,試験によく出る熟語,P.32 形容詞・副詞,idiom,熟語,be about to ~,まさに〜しようとしている,,,,,I was ____ leave when it started to rain.,出かけようとしたとき雨が降り出した。,about to
+142,試験によく出る熟語,P.32 形容詞・副詞,idiom,熟語,be capable of ~,〜の能力がある,,,,,She is ____ solving hard problems.,彼女は難問を解く能力がある。,capable of
+143,試験によく出る熟語,P.32 形容詞・副詞,idiom,熟語,be dependent on ~,〜に依存している,,,,,The town is ____ tourism.,その町は観光に依存している。,dependent on
+144,試験によく出る熟語,P.32 形容詞・副詞,idiom,熟語,be familiar with ~,〜に精通している,,,,,Are you ____ this software?,このソフトに精通していますか。,familiar with
+145,試験によく出る熟語,P.32 形容詞・副詞,idiom,熟語,be far from ~,決して〜ではない,,,,,Her answer was ____ perfect.,彼女の答えは決して完璧ではなかった。,far from
+146,試験によく出る熟語,P.32 形容詞・副詞,idiom,熟語,be full of ~,〜でいっぱいである,,,,,The box was ____ old photos.,その箱は古い写真でいっぱいだった。,full of
+147,試験によく出る熟語,P.32 形容詞・副詞,idiom,熟語,be responsible for ~,〜に対して責任がある,,,,,You are ____ your own choices.,自分の選択には自分で責任がある。,responsible for
+148,試験によく出る熟語,P.32 形容詞・副詞,idiom,熟語,be similar to ~,〜に似ている,,,,,Her voice is ____ her mother's.,彼女の声は母親に似ている。,similar to
+149,試験によく出る熟語,P.32 形容詞・副詞,idiom,熟語,so far,今までのところ,,,,,Everything has gone well ____.,今までのところすべて順調だ。,so far
+150,試験によく出る熟語,P.33 動詞,idiom,熟語,appeal to ~,〜の心に訴える,,,,,His music ____ young people.,彼の音楽は若者の心に訴える。,appeals to
+151,試験によく出る熟語,P.33 動詞,idiom,熟語,become accustomed to ~,〜に慣れる,,,,,I have ____ getting up early.,私は早起きに慣れた。,become accustomed to
+152,試験によく出る熟語,P.33 動詞,idiom,熟語,call off ~,〜を中止する・取りやめる,,,,,They had to ____ the game because of rain.,雨のため試合を中止せざるをえなかった。,call off
+153,試験によく出る熟語,P.33 動詞,idiom,熟語,fall asleep,眠りに落ちる,,,,,He ____ during the movie.,彼は映画の途中で眠りに落ちた。,fell asleep
+154,試験によく出る熟語,P.33 動詞,idiom,熟語,get over ~,〜を乗り越える・克服する,,,,,It took her weeks to ____ the cold.,彼女は風邪を治すのに数週間かかった。,get over
+155,試験によく出る熟語,P.33 動詞,idiom,熟語,get ready for ~,〜の準備をする,,,,,Please ____ the trip by tonight.,今夜までに旅行の準備をしてください。,get ready for
+156,試験によく出る熟語,P.33 動詞,idiom,熟語,go wrong,うまくいかない,,,,,Something may ____ if we rush.,急ぐと何かがうまくいかないかもしれない。,go wrong
+157,試験によく出る熟語,P.33 動詞,idiom,熟語,head for ~,〜に向かう,,,,,Let's ____ the station now.,もう駅に向かおう。,head for
+158,試験によく出る熟語,P.33 動詞,idiom,熟語,hear from ~,〜から連絡をもらう,,,,,I haven't ____ him in years.,何年も彼から連絡をもらっていない。,heard from
+159,試験によく出る熟語,P.33 動詞,idiom,熟語,keep ~ a secret,〜を秘密にする,,,,,We decided to ____.,私たちはそれを秘密にすることにした。,keep it a secret
+160,試験によく出る熟語,P.33 動詞,idiom,熟語,make out ~,〜を判読する,,,,,I can't ____ his handwriting.,彼の字は判読できない。,make out
+161,試験によく出る熟語,P.33 動詞,idiom,熟語,make sense of ~,〜を理解する,,,,,I can't ____ these directions.,この説明が理解できない。,make sense of
+162,試験によく出る熟語,P.33 動詞,idiom,熟語,participate in ~,〜に参加する,,,,,Many students ____ the contest.,多くの生徒がそのコンテストに参加した。,participated in
+163,試験によく出る熟語,P.33 動詞,idiom,熟語,put off ~,〜を延期する,,,,,They ____ the meeting until Friday.,彼らは会議を金曜まで延期した。,put off
+164,試験によく出る熟語,P.33 動詞,idiom,熟語,put up with ~,〜に耐える・我慢する,,,,,I can't ____ this noise.,この騒音には耐えられない。,put up with
+165,試験によく出る熟語,P.33 動詞,idiom,熟語,run out of ~,〜を使い果たす,,,,,We ____ milk this morning.,今朝牛乳を切らしてしまった。,ran out of
+166,試験によく出る熟語,P.33 動詞,idiom,熟語,stay away from ~,〜から離れている,,,,,Please ____ the edge.,端から離れていてください。,stay away from
+167,試験によく出る熟語,P.33 動詞,idiom,熟語,turn out to be ~,〜であることが判明する,,,,,The rumor ____ false.,そのうわさは嘘だと判明した。,turned out to be
+168,試験によく出る熟語,P.33 動詞,idiom,熟語,turn up,(不意に)現れる,,,,,He ____ at the party without notice.,彼は予告なくパーティーに現れた。,turned up
+169,試験によく出る熟語,P.33 動詞,idiom,熟語,wonder about ~,〜について思いをめぐらせる,,,,,I sometimes ____ my future.,私は時々自分の将来について思いをめぐらせる。,wonder about`;
+
+/* ---------- tiny IndexedDB wrapper ---------- */
+const DB={
+  db:null,
+  open(){return new Promise((res,rej)=>{
+    const r=indexedDB.open("vocab-app",1);
+    r.onupgradeneeded=e=>{
+      const d=e.target.result;
+      if(!d.objectStoreNames.contains("kv"))d.createObjectStore("kv");
+      if(!d.objectStoreNames.contains("progress"))d.createObjectStore("progress");
+    };
+    r.onsuccess=e=>{DB.db=e.target.result;res();};
+    r.onerror=()=>rej(r.error);
+  });},
+  _tx(store,mode){return DB.db.transaction(store,mode).objectStore(store);},
+  get(store,key){return new Promise((res,rej)=>{const q=DB._tx(store,"readonly").get(key);q.onsuccess=()=>res(q.result);q.onerror=()=>rej(q.error);});},
+  put(store,key,val){return new Promise((res,rej)=>{const q=DB._tx(store,"readwrite").put(val,key);q.onsuccess=()=>res();q.onerror=()=>rej(q.error);});},
+  del(store,key){return new Promise((res,rej)=>{const q=DB._tx(store,"readwrite").delete(key);q.onsuccess=()=>res();q.onerror=()=>rej(q.error);});},
+  clear(store){return new Promise((res,rej)=>{const q=DB._tx(store,"readwrite").clear();q.onsuccess=()=>res();q.onerror=()=>rej(q.error);});},
+  entries(store){return new Promise((res,rej)=>{
+    const out=[];const q=DB._tx(store,"readonly").openCursor();
+    q.onsuccess=e=>{const c=e.target.result;if(c){out.push([c.key,c.value]);c.continue();}else res(out);};
+    q.onerror=()=>rej(q.error);
+  });}
+};
+
+/* ---------- global state ---------- */
+let QUESTIONS=[];                 // all imported question rows
+let PROG=new Map();               // wordKey -> progress record
+let SETTINGS={goalDate:"",autoPlay:true};
+let DAILY={};                     // "YYYY-MM-DD" -> {c,w}
+const $=s=>document.querySelector(s);
+const screen=$("#screen");
+
+function toast(msg){const t=$("#toast");t.textContent=msg;t.classList.add("show");clearTimeout(t._tm);t._tm=setTimeout(()=>t.classList.remove("show"),2200);}
+function esc(s){return String(s??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
+function shuffle(a){a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[a[i],a[j]]=[a[j],a[i]];}return a;}
+function uniq(a){return [...new Set(a)];}
+function todayStr(){const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
+
+/* ---------- CSV parsing (quoted fields ok) ---------- */
+function parseCSV(text){
+  const rows=[];let row=[],cur="",q=false;
+  text=text.replace(/^\uFEFF/,"").replace(/\r\n/g,"\n").replace(/\r/g,"\n");
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(q){ if(c==='"'){ if(text[i+1]==='"'){cur+='"';i++;} else q=false; } else cur+=c; }
+    else{
+      if(c==='"')q=true;
+      else if(c===','){row.push(cur);cur="";}
+      else if(c==='\n'){row.push(cur);rows.push(row);row=[];cur="";}
+      else cur+=c;
+    }
+  }
+  if(cur!==""||row.length){row.push(cur);rows.push(row);}
+  return rows;
+}
+function rowsToItems(rows){
+  if(!rows.length)return [];
+  const head=rows.shift().map(h=>String(h??"").trim().toLowerCase());
+  const idx=n=>head.indexOf(n);
+  const out=[];
+  for(const r of rows){
+    const get=n=>{const i=idx(n);return i>=0&&r[i]!=null?String(r[i]).trim():"";};
+    const q=get("question"),a=get("answer");
+    if(!q||!a)continue;
+    out.push({
+      book:get("book")||"未分類",section:get("section")||"その他",
+      type:(get("type")||"word").toLowerCase(),category:get("category")||"その他",
+      question:q,answer:a,
+      choices:[get("choice1"),get("choice2"),get("choice3")].filter(x=>x),
+      note:get("note"),example:get("example"),exampleJa:get("example_ja"),exampleAnswer:get("example_answer")
+    });
+  }
+  return out;
+}
+function loadCSVText(text){return rowsToItems(parseCSV(text).filter(r=>r.length>1&&r.some(c=>String(c).trim()!=="")));}
+function itemsToCSV(items){
+  const head=["id","book","section","type","category","question","answer","choice1","choice2","choice3","note","example","example_ja","example_answer"];
+  const cell=v=>{v=String(v??"");return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;};
+  const lines=[head.join(",")];
+  items.forEach((it,i)=>{
+    lines.push([i+1,it.book,it.section,it.type,it.category,it.question,it.answer,
+      it.choices[0]||"",it.choices[1]||"",it.choices[2]||"",it.note||"",it.example||"",it.exampleJa||"",it.exampleAnswer||""].map(cell).join(","));
+  });
+  return lines.join("\n");
+}
+
+/* ---------- mastery engine ---------- */
+const LEVEL_NAMES=["未学習","学習中","定着中","マスター"];
+const LEVEL_COLORS=["#3a3f4a","var(--blue)","var(--gold)","var(--green)"];
+function wordKey(it){return it.question.toLowerCase().replace(/~/g,"").replace(/\s+/g," ").trim();}
+function levelOf(p){const x=p?p.pts:0;return x>=3?3:x>=2?2:x>=1?1:0;}
+function getProg(k){return PROG.get(k)||{pts:0,wrong:0,help:0,lastDay:"",seen:0};}
+async function saveProg(k,p){PROG.set(k,p);await DB.put("progress",k,p);}
+async function recordCorrect(it,written){
+  const k=wordKey(it),p=getProg(k);p.seen++;
+  if(p.lastDay!==todayStr()){              // 1日1カウントまで
+    p.pts=Math.min(4,+(p.pts+(written?1.2:1)).toFixed(2));
+    p.lastDay=todayStr();
+  }
+  await saveProg(k,p);await bumpDaily(true);
+}
+async function recordWrong(it){
+  const k=wordKey(it),p=getProg(k);p.seen++;p.wrong++;
+  p.pts=Math.max(0,levelOf(p)-1);          // 1段階降格
+  await saveProg(k,p);await bumpDaily(false);
+}
+async function recordHelp(it){              // 据え置き（レベル変化なし）
+  const k=wordKey(it),p=getProg(k);p.seen++;p.help++;p.wrong++;
+  await saveProg(k,p);await bumpDaily(false);
+}
+async function bumpDaily(ok){
+  const d=todayStr();DAILY[d]=DAILY[d]||{c:0,w:0};
+  ok?DAILY[d].c++:DAILY[d].w++;
+  await DB.put("kv","daily",DAILY);
+}
+function masteryCounts(){
+  const c=[0,0,0,0];const seen=new Set();
+  for(const it of QUESTIONS){const k=wordKey(it);if(seen.has(k))continue;seen.add(k);c[levelOf(getProg(k))]++;}
+  return c;
+}
+function uniqueWordCount(){return new Set(QUESTIONS.map(wordKey)).size;}
+function remainingCorrects(){               // master(3pt)までに必要な正解回数の概算
+  let sum=0;const seen=new Set();
+  for(const it of QUESTIONS){const k=wordKey(it);if(seen.has(k))continue;seen.add(k);
+    sum+=Math.max(0,Math.ceil(3-getProg(k).pts));}
+  return sum;
+}
+function paceInfo(){
+  if(!SETTINGS.goalDate)return null;
+  const goal=new Date(SETTINGS.goalDate+"T23:59:59");
+  const days=Math.max(1,Math.ceil((goal-new Date())/86400000));
+  const rem=remainingCorrects();
+  return {days,rem,perDay:Math.ceil(rem/days),past:goal<new Date()};
+}
+function reviewQueue(items,limit){
+  return items
+    .map(it=>({it,p:getProg(wordKey(it))}))
+    .filter(x=>levelOf(x.p)<3||x.p.wrong>0)
+    .sort((a,b)=>{
+      const l=levelOf(a.p)-levelOf(b.p);if(l)return l;
+      const w=b.p.wrong-a.p.wrong;if(w)return w;
+      return (a.p.lastDay||"")<(b.p.lastDay||"")?-1:1;
+    })
+    .slice(0,limit||20).map(x=>x.it);
+}
+
+/* ---------- speech ---------- */
+const synth=window.speechSynthesis;
+let enVoice=null;
+function pickVoice(){
+  if(!synth)return;
+  const vs=synth.getVoices().filter(v=>/^en(-|_|$)/i.test(v.lang));
+  enVoice=vs.find(v=>/Samantha/i.test(v.name))||vs.find(v=>/Google US English/i.test(v.name))
+    ||vs.find(v=>/en-US/i.test(v.lang))||vs[0]||null;
+}
+if(synth){pickVoice();synth.onvoiceschanged=pickVoice;}
+function speak(text,btn){
+  if(!synth)return;
+  synth.cancel();
+  const clean=String(text).replace(/_{2,}/g," blank ").replace(/~/g," ").replace(/\s+/g," ").trim();
+  const u=new SpeechSynthesisUtterance(clean);
+  if(enVoice)u.voice=enVoice;
+  u.lang=(enVoice&&enVoice.lang)||"en-US";u.rate=.92;
+  if(btn){btn.classList.add("playing");u.onend=u.onerror=()=>btn.classList.remove("playing");}
+  synth.speak(u);
+}
+
+/* ---------- quiz helpers ---------- */
+const TYPE_LABEL={word:"単語",idiom:"熟語",grammar:"文法",order:"並べ替え"};
+function canEnglishAnswer(it){
+  if(it.type==="order"||it.type==="grammar")return false;
+  const q=it.question.trim();
+  if(/_/.test(q))return false;
+  return q.replace(/~/g,"").trim().split(/\s+/).filter(Boolean).length<=4;
+}
+function hasExample(it){return !!(it.example&&/_{2,}/.test(it.example));}
+function clozeAnswer(it){return (it.exampleAnswer&&it.exampleAnswer.trim())?it.exampleAnswer.trim():it.question.replace(/~/g,"").trim();}
+function clozeHTML(it){return esc(it.example).replace(/_{2,}/,'<span class="cloze-gap">____</span>');}
+function levenshtein(a,b){
+  a=a.toLowerCase();b=b.toLowerCase();
+  const m=a.length,n=b.length,dp=Array.from({length:m+1},(_,i)=>[i,...Array(n).fill(0)]);
+  for(let j=0;j<=n;j++)dp[0][j]=j;
+  for(let i=1;i<=m;i++)for(let j=1;j<=n;j++)
+    dp[i][j]=Math.min(dp[i-1][j]+1,dp[i][j-1]+1,dp[i-1][j-1]+(a[i-1]===b[j-1]?0:1));
+  return dp[m][n];
+}
+function normSpell(s){return String(s).trim().toLowerCase().replace(/~/g," ").replace(/\s+/g," ").trim();}
+function buildChoices(it){                  // 英→日: 同category優先で意味の4択
+  if(it.choices.length>=3)return shuffle([it.answer,...it.choices.slice(0,3)]);
+  const distract=[],seen=new Set([it.answer]);
+  const tiers=[
+    QUESTIONS.filter(d=>d.category===it.category&&d.type===it.type),
+    QUESTIONS.filter(d=>d.type===it.type),QUESTIONS];
+  for(const tier of tiers){
+    for(const d of shuffle(tier)){if(distract.length>=3)break;
+      if(!seen.has(d.answer)){distract.push(d.answer);seen.add(d.answer);}}
+    if(distract.length>=3)break;
+  }
+  return shuffle([it.answer,...distract]);
+}
+function buildChoicesReverse(it){           // 日→英: 英語の4択
+  const distract=[],seen=new Set([it.question]);
+  const tiers=[
+    QUESTIONS.filter(d=>d.category===it.category&&d.type===it.type&&canEnglishAnswer(d)),
+    QUESTIONS.filter(d=>d.type===it.type&&canEnglishAnswer(d)),
+    QUESTIONS.filter(d=>canEnglishAnswer(d))];
+  for(const tier of tiers){
+    for(const d of shuffle(tier)){if(distract.length>=3)break;
+      if(!seen.has(d.question)){distract.push(d.question);seen.add(d.question);}}
+    if(distract.length>=3)break;
+  }
+  return shuffle([it.question,...distract]);
+}
+function buildChoicesCloze(it,correct){     // 穴埋め4択
+  const distract=[],seen=new Set([correct.toLowerCase()]);
+  const tiers=[
+    QUESTIONS.filter(d=>d.category===it.category&&d!==it),
+    QUESTIONS.filter(d=>d.type===it.type&&d!==it),
+    QUESTIONS.filter(d=>d!==it)];
+  for(const tier of tiers){
+    for(const d of shuffle(tier)){if(distract.length>=3)break;
+      const w=(d.exampleAnswer&&hasExample(d))?d.exampleAnswer.trim():d.question.replace(/~/g,"").trim();
+      if(w&&!seen.has(w.toLowerCase())){distract.push(w);seen.add(w.toLowerCase());}}
+    if(distract.length>=3)break;
+  }
+  return shuffle([correct,...distract]);
+}
+// 形式の自動フォールバック
+function effectiveMode(it,chosen){
+  let m=chosen;
+  if(it.type==="order")return "order";
+  if((m==="cloze_mc"||m==="cloze_type")&&!hasExample(it))
+    m=canEnglishAnswer(it)?(m==="cloze_type"?"spell":"ja2en"):"en2ja";
+  if((m==="ja2en"||m==="spell")&&!canEnglishAnswer(it))m="en2ja";
+  return m;
+}
+const WRITTEN_MODES=new Set(["spell","cloze_type"]);
+
+/* ================================================================
+   QUIZ SESSION
+================================================================ */
+let session=null;
+function startQuiz(queue,label,chosenMode,returnTo){
+  session={queue,label,chosenMode,returnTo,idx:0,score:0,total:queue.length,wrong:[],answered:false};
+  renderQ();
+}
+function quitQuiz(){
+  if(synth)synth.cancel();
+  session=null;
+  (sessionReturn||renderStudyRoot)();
+}
+let sessionReturn=null;
+
+function renderQ(){
+  const s=session;s.answered=false;
+  const item=s.queue[s.idx];
+  const mode=effectiveMode(item,s.chosenMode);
+  const tlabel=TYPE_LABEL[item.type]||item.type;
+  const modeLabel={en2ja:"英→日",ja2en:"日→英",spell:"記述",order:"並べ替え",cloze_mc:"穴埋め",cloze_type:"穴埋め記述"}[mode];
+  const lvl=levelOf(getProg(wordKey(item)));
+
+  let body="",prompt="",speakWord=null;
+  if(mode==="order"){
+    prompt="日本語の意味になるよう並べ替え";
+    body=`<div class="qword-wrap"><div class="qsentence">${esc(item.question)}</div></div>
+      <div class="order-answer" id="ans"></div><div class="order-bank" id="bank"></div>
+      <button class="order-check" id="check" disabled>こたえ合わせ</button>`;
+  }else if(mode==="ja2en"){
+    prompt="正しい英語を選ぶ";
+    body=`<div class="qword-wrap"><div class="qsentence">${esc(item.answer)}</div></div><div class="opts" id="opts"></div>`;
+  }else if(mode==="spell"){
+    prompt="意味に合う英語をタイプ";
+    body=`<div class="qword-wrap"><div class="qsentence">${esc(item.answer)}</div></div>
+      <div class="spell-wrap">
+        <input class="spell-input" id="spell" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="英語を入力">
+        <button class="spell-submit" id="spellBtn" disabled>こたえ合わせ</button>
+        <button class="spell-help" id="helpBtn">思い出せない… 4択にする</button>
+      </div><div class="opts" id="opts" style="display:none"></div>`;
+  }else if(mode==="cloze_type"){
+    prompt="例文の空所に入る英語をタイプ";
+    body=`<div class="qword-wrap"><div class="qsentence">${clozeHTML(item)}</div>
+      ${item.exampleJa?`<div class="qprompt-jp">${esc(item.exampleJa)}</div>`:""}</div>
+      <div class="spell-wrap">
+        <input class="spell-input" id="spell" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="空所に入る語を入力">
+        <button class="spell-submit" id="spellBtn" disabled>こたえ合わせ</button>
+        <button class="spell-help" id="helpBtn">思い出せない… 4択にする</button>
+      </div><div class="opts" id="opts" style="display:none"></div>`;
+  }else if(mode==="cloze_mc"){
+    prompt="例文の空所に入る英語を選ぶ";
+    body=`<div class="qword-wrap"><div class="qsentence">${clozeHTML(item)}</div>
+      ${item.exampleJa?`<div class="qprompt-jp">${esc(item.exampleJa)}</div>`:""}</div>
+      <div class="opts" id="opts"></div>`;
+  }else{ // en2ja
+    const grammar=item.type==="grammar";
+    prompt=grammar?"空所に入る語を選ぶ":(item.type==="idiom"?"この熟語の意味は？":"この単語の意味は？");
+    speakWord=item.question;
+    body=`<div class="qword-wrap"><div class="${grammar?"qsentence":"qword"}">${esc(item.question)}</div></div>
+      <button class="speak" id="speak"><svg class="wave" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a9 9 0 0 1 0 14"/></svg><span>発音を聞く</span></button>
+      <div class="opts" id="opts"></div>`;
+  }
+
+  screen.innerHTML=`
+    <div class="navbar">
+      <button class="back" id="qquit">終了</button>
+      <div class="nav-title"><b>${esc(s.label)}</b></div>
+      <span class="lvl-badge lvl-${lvl}">${LEVEL_NAMES[lvl]}</span>
+      <span class="mode-pill">${modeLabel}</span>
+      ${mode==="en2ja"?`<button class="audio-toggle ${SETTINGS.autoPlay?'on':''}" id="autoBtn">${SETTINGS.autoPlay?'🔊':'🔇'}</button>`:""}
+    </div>
+    <div class="track"><div style="width:${s.idx/s.total*100}%"></div></div>
+    <div class="qmeta"><span>${String(s.idx+1).padStart(2,'0')} / ${String(s.total).padStart(2,'0')}</span><span>${tlabel}</span></div>
+    <div class="qtag">${prompt}</div>
+    ${body}
+    <div class="fb" id="fb"></div>
+    <button class="next" id="next">NEXT →</button>`;
+  window.scrollTo(0,0);
+
+  $("#qquit").onclick=()=>{if(confirm("学習を終了しますか？"))quitQuiz();};
+  $("#next").onclick=advance;
+
+  if(mode==="order"){setupOrder(item);return;}
+  if(mode==="spell"||mode==="cloze_type"){
+    const inp=$("#spell"),btn=$("#spellBtn");
+    inp.oninput=()=>{btn.disabled=inp.value.trim()==="";};
+    inp.onkeydown=e=>{if(e.key==="Enter"&&!btn.disabled)btn.click();};
+    btn.onclick=()=>checkTyped(inp,item,mode);
+    $("#helpBtn").onclick=()=>typedHelp(item,mode);
+    return;
+  }
+  // multiple choice
+  let correct,choices;
+  if(mode==="ja2en"){correct=item.question;choices=buildChoicesReverse(item);}
+  else if(mode==="cloze_mc"){correct=clozeAnswer(item);choices=buildChoicesCloze(item,correct);}
+  else{correct=item.answer;choices=buildChoices(item);}
+  const keys=["A","B","C","D"];
+  $("#opts").innerHTML=choices.map((c,i)=>`<button class="opt" data-v="${encodeURIComponent(c)}"><span class="k">${keys[i]}</span><span>${esc(c)}</span></button>`).join("");
+  document.querySelectorAll(".opt").forEach(b=>b.onclick=()=>chooseMC(b,item,correct,mode));
+  if(speakWord!==null){
+    const sp=$("#speak");
+    sp.onclick=()=>speak(speakWord,sp);
+    if(SETTINGS.autoPlay)setTimeout(()=>speak(speakWord,sp),350);
+    const ab=$("#autoBtn");
+    if(ab)ab.onclick=async()=>{SETTINGS.autoPlay=!SETTINGS.autoPlay;await DB.put("kv","settings",SETTINGS);
+      ab.classList.toggle("on",SETTINGS.autoPlay);ab.textContent=SETTINGS.autoPlay?'🔊':'🔇';
+      if(SETTINGS.autoPlay)speak(speakWord,sp);else synth&&synth.cancel();};
+  }
+}
+
+function paintMC(correct,picked){
+  document.querySelectorAll(".opt").forEach(b=>{
+    b.disabled=true;const v=decodeURIComponent(b.dataset.v);
+    if(v===correct)b.classList.add("correct");
+    else if(b===picked)b.classList.add("wrong");
+    else b.classList.add("dim");
+  });
+}
+async function chooseMC(btn,item,correct,mode){
+  const s=session;if(s.answered)return;s.answered=true;
+  const picked=decodeURIComponent(btn.dataset.v);
+  const ok=picked===correct;
+  paintMC(correct,btn);
+  if(mode==="ja2en")speak(item.question,null);
+  if(mode==="cloze_mc")speak(item.example.replace(/_{2,}/,clozeAnswer(item)),null);
+  if(ok)await recordCorrect(item,false);else await recordWrong(item);
+  finishAnswer(ok,item,ok?"CORRECT":"正解 → "+correct,false);
+}
+async function checkTyped(inp,item,mode){
+  const s=session;if(s.answered)return;s.answered=true;
+  const target=mode==="cloze_type"?clozeAnswer(item):item.question;
+  const ans=normSpell(target),got=normSpell(inp.value);
+  const ok=got===ans;
+  inp.disabled=true;inp.classList.add(ok?"correct":"wrong");
+  const b=$("#spellBtn");if(b)b.style.display="none";
+  const h=$("#helpBtn");if(h)h.style.display="none";
+  if(mode==="cloze_type")speak(item.example.replace(/_{2,}/,clozeAnswer(item)),null);
+  else speak(item.question,null);
+  let msg;
+  if(ok)msg="CORRECT";
+  else{const near=levenshtein(got,ans)<=1&&got.length>0;msg=(near?"惜しい！ ":"")+"正解 → "+target;}
+  if(ok)await recordCorrect(item,true);else await recordWrong(item);
+  finishAnswer(ok,item,msg,false);
+}
+function typedHelp(item,mode){
+  const s=session;if(s.answered)return;
+  const inp=$("#spell");if(inp)inp.disabled=true;
+  const sb=$("#spellBtn");if(sb)sb.style.display="none";
+  const hb=$("#helpBtn");if(hb)hb.style.display="none";
+  const correct=mode==="cloze_type"?clozeAnswer(item):item.question;
+  const choices=mode==="cloze_type"?buildChoicesCloze(item,correct):buildChoicesReverse(item);
+  const keys=["A","B","C","D"];
+  const opts=$("#opts");opts.style.display="flex";
+  opts.innerHTML=choices.map((c,i)=>`<button class="opt" data-v="${encodeURIComponent(c)}"><span class="k">${keys[i]}</span><span>${esc(c)}</span></button>`).join("");
+  $("#fb").innerHTML='<span class="note">ヒント使用中：正解しても復習に回ります</span>';
+  $("#fb").className="fb show";
+  opts.querySelectorAll(".opt").forEach(b=>b.onclick=async()=>{
+    if(s.answered)return;s.answered=true;
+    const picked=decodeURIComponent(b.dataset.v);
+    const right=picked===correct;
+    paintMC(correct,b);
+    if(mode==="cloze_type")speak(item.example.replace(/_{2,}/,clozeAnswer(item)),null);
+    else speak(item.question,null);
+    await recordHelp(item);  // 習熟度は据え置き・復習対象
+    finishAnswer(false,item,right?"ヒントで正解（復習対象になります）":"正解 → "+correct,true);
+  });
+}
+function setupOrder(item){
+  const tokens=item.answer.split(/\s+/);
+  const chips=shuffle(tokens.map((t,i)=>({t,i})));
+  let placed=[];
+  const ans=$("#ans"),bank=$("#bank"),check=$("#check");
+  function paint(){
+    bank.innerHTML=chips.map(c=>`<span class="chip ${placed.includes(c.i)?'used':''}" data-i="${c.i}">${esc(c.t)}</span>`).join("");
+    ans.innerHTML=placed.map(i=>`<span class="chip in-answer" data-i="${i}">${esc(tokens[i])}</span>`).join("");
+    check.disabled=placed.length!==tokens.length;
+    bank.querySelectorAll(".chip:not(.used)").forEach(el=>el.onclick=()=>{placed.push(+el.dataset.i);paint();});
+    ans.querySelectorAll(".chip").forEach(el=>el.onclick=()=>{placed=placed.filter(x=>x!==+el.dataset.i);paint();});
+  }
+  paint();
+  check.onclick=async()=>{
+    const s=session;if(s.answered)return;s.answered=true;
+    const built=placed.map(i=>tokens[i]).join(" ");
+    const ok=built.toLowerCase()===item.answer.toLowerCase();
+    check.style.display="none";
+    ans.style.borderColor=ok?"var(--green)":"var(--red)";
+    document.querySelectorAll(".chip").forEach(c=>c.style.pointerEvents="none");
+    speak(item.answer,null);
+    if(ok)await recordCorrect(item,false);else await recordWrong(item);
+    finishAnswer(ok,item,ok?"CORRECT":"正解 → "+item.answer,false);
+  };
+}
+function finishAnswer(ok,item,msg,helpUsed){
+  const s=session;
+  const fb=$("#fb");
+  fb.innerHTML=esc(msg)+(item.note?`<span class="note">${esc(item.note)}</span>`:"");
+  fb.className="fb show "+(ok?"ok":"no");
+  if(ok)s.score++;else s.wrong.push(item);
+  const n=$("#next");n.classList.add("show");
+  n.textContent=(s.idx+1>=s.total)?"結果を見る →":"NEXT →";
+}
+function advance(){
+  if(synth)synth.cancel();
+  const s=session;s.idx++;
+  if(s.idx>=s.total)renderResult();else renderQ();
+}
+function renderResult(){
+  const s=session;
+  const pct=Math.round(s.score/s.total*100);
+  const wrongN=s.total-s.score;
+  const C=2*Math.PI*64,off=C*(1-pct/100);
+  const col=pct>=80?"var(--green)":pct>=50?"var(--gold)":"var(--red)";
+  let msg,sub;
+  if(pct===100){msg="PERFECT";sub="全問正解。完璧です。";}
+  else if(pct>=80){msg="EXCELLENT";sub="高い理解度です。この調子で。";}
+  else if(pct>=50){msg="GOOD";sub="あと一歩。間違えた問題を復習しましょう。";}
+  else{msg="KEEP GOING";sub="繰り返しが定着への近道です。";}
+  screen.innerHTML=`
+    <div class="result">
+      <div class="lt-eyebrow">Result · ${esc(s.label)}</div>
+      <div class="ring">
+        <svg width="150" height="150">
+          <circle cx="75" cy="75" r="64" stroke="var(--panel-2)" stroke-width="9" fill="none"/>
+          <circle cx="75" cy="75" r="64" stroke="${col}" stroke-width="9" fill="none"
+            stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C}" id="arc"/>
+        </svg>
+        <div class="pct"><b>${pct}<span style="font-size:18px">%</span></b><small>SCORE</small></div>
+      </div>
+      <div class="res-msg">${msg}</div>
+      <div class="res-sub">${sub}</div>
+      <div class="stat-row">
+        <div class="s"><div class="n">${s.total}</div><div class="l">Total</div></div>
+        <div class="s"><div class="n" style="color:var(--green)">${s.score}</div><div class="l">Correct</div></div>
+        <div class="s"><div class="n" style="color:var(--red)">${wrongN}</div><div class="l">Wrong</div></div>
+      </div>
+      ${wrongN>0?`<div class="retry-note">◆ 間違えた ${wrongN} 問だけ再チャレンジできます</div>
+        <button class="btn danger" id="retry">間違いだけ再チャレンジ</button>`:""}
+      <button class="btn primary" id="menu" style="margin-top:10px">メニューに戻る</button>
+    </div>`;
+  requestAnimationFrame(()=>{const a=$("#arc");a.style.transition="stroke-dashoffset 1s cubic-bezier(.2,.8,.3,1)";a.style.strokeDashoffset=off;});
+  if(wrongN>0)$("#retry").onclick=()=>startQuiz(shuffle(s.wrong),s.label+" · 復習",s.chosenMode);
+  $("#menu").onclick=quitQuiz;
+}
+
+/* ================================================================
+   TABS
+================================================================ */
+let currentTab="home";
+function switchTab(tab){
+  currentTab=tab;session=null;if(synth)synth.cancel();
+  document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active",b.dataset.tab===tab));
+  ({home:renderHome,study:renderStudyRoot,progress:renderProgress,settings:renderSettings})[tab]();
+  window.scrollTo(0,0);
+}
+document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>switchTab(b.dataset.tab));
+
+/* ---------- HOME ---------- */
+function renderHome(){
+  const c=masteryCounts(),total=uniqueWordCount();
+  const pace=paceInfo();
+  const d=DAILY[todayStr()]||{c:0,w:0};
+  const mastered=c[3];
+  let goalCard;
+  if(pace){
+    goalCard=pace.past
+      ?`<div class="card hl"><div class="ic">Goal</div><h3>目標日を過ぎました</h3>
+        <p>マスター ${mastered}/${total} 語。設定から新しい目標日を設定できます。</p></div>`
+      :`<div class="card hl"><div class="ic">D-${pace.days}</div>
+        <h3>目標まで残り ${pace.days} 日</h3>
+        <p>全${total}語マスターまで、あと正解 <b style="color:var(--gold)">${pace.rem}</b> 回。<br>
+        必要ペースは <b style="color:var(--gold)">1日 ${pace.perDay} 回</b> の正解です。</p></div>`;
+  }else{
+    goalCard=`<div class="card hl" id="setGoal" style="cursor:pointer"><div class="ic">Goal</div>
+      <h3>目標日を設定する</h3><p>試験日などを設定すると、1日に必要な学習ペースを逆算して表示します。</p></div>`;
+  }
+  screen.innerHTML=`
+    <div class="lt-eyebrow">Vocab Trainer</div>
+    <div class="lt">おかえりなさい</div>
+    <div class="lt-sub">${new Date().toLocaleDateString("ja-JP",{month:"long",day:"numeric",weekday:"long"})} · 収録 ${QUESTIONS.length} 問</div>
+    ${goalCard}
+    <div class="card">
+      <div class="ic">Today</div>
+      <div class="stat-row" style="margin:8px 0 0;border:none;">
+        <div class="s" style="border:none"><div class="n" style="color:var(--green)">${d.c}</div><div class="l">正解</div></div>
+        <div class="s"><div class="n" style="color:var(--red)">${d.w}</div><div class="l">不正解</div></div>
+        <div class="s"><div class="n">${mastered}<span style="font-size:13px;color:var(--sub)">/${total}</span></div><div class="l">マスター</div></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="ic">Mastery</div>
+      <div class="mbar">${c.map((n,i)=>`<div style="flex:${Math.max(n,0.001)};background:${LEVEL_COLORS[i]}"></div>`).join("")}</div>
+      <div class="mlegend">${c.map((n,i)=>`<span><span class="dot" style="background:${LEVEL_COLORS[i]}"></span>${LEVEL_NAMES[i]} ${n}</span>`).join("")}</div>
+    </div>
+    <button class="btn primary" id="goStudy">学習を始める</button>
+    <button class="btn ghost" id="goReview">弱点を復習する</button>`;
+  $("#goStudy").onclick=()=>switchTab("study");
+  $("#goReview").onclick=()=>{switchTab("study");renderReviewScope();};
+  const sg=$("#setGoal");if(sg)sg.onclick=()=>switchTab("settings");
+}
+
+/* ---------- STUDY (hierarchical) ---------- */
+function booksList(){return uniq(QUESTIONS.map(d=>d.book));}
+function sectionsOf(b){return uniq(QUESTIONS.filter(d=>d.book===b).map(d=>d.section));}
+function categoriesOf(b,s){return uniq(QUESTIONS.filter(d=>d.book===b&&d.section===s).map(d=>d.category));}
+function itemsOf(b,s,c){return QUESTIONS.filter(d=>(b==null||d.book===b)&&(s==null||d.section===s)&&(c==null||d.category===c));}
+
+function renderStudyRoot(){
+  sessionReturn=renderStudyRoot;
+  const books=booksList();
+  screen.innerHTML=`
+    <div class="lt-eyebrow">Study</div>
+    <div class="lt">学習</div>
+    <div class="lt-sub">教材から範囲を選んで学習します。</div>
+    <div class="card hl" id="reviewCard" style="cursor:pointer">
+      <div class="ic">Review</div><h3>弱点を復習する</h3>
+      <p>習熟度が低い・間違いが多い問題から優先的に出題します。</p>
+    </div>
+    <div class="divider"><span>Books</span></div>
+    <div class="list">
+      ${books.map(b=>{
+        const n=QUESTIONS.filter(d=>d.book===b).length;
+        return `<button class="row" data-book="${encodeURIComponent(b)}">
+          <div class="row-main"><div class="row-title">${esc(b)}</div>
+          <div class="row-sub">${sectionsOf(b).length} セクション · ${n} 問</div></div>
+          <div class="row-arrow">→</div></button>`;}).join("")}
+    </div>`;
+  $("#reviewCard").onclick=renderReviewScope;
+  document.querySelectorAll(".row[data-book]").forEach(r=>r.onclick=()=>renderSections(decodeURIComponent(r.dataset.book)));
+}
+function renderSections(book){
+  screen.innerHTML=`
+    <div class="navbar"><button class="back" id="bk">← 教材</button><div class="nav-title"><b>${esc(book)}</b></div></div>
+    <div class="lt" style="font-size:22px">セクションを選ぶ</div>
+    <div class="lt-sub">セクション全体、または品詞・形式で絞り込めます。</div>
+    <div class="list">
+      ${sectionsOf(book).map(sec=>{
+        const its=itemsOf(book,sec,null);
+        const avg=its.reduce((a,d)=>a+levelOf(getProg(wordKey(d))),0)/its.length;
+        return `<button class="row" data-sec="${encodeURIComponent(sec)}">
+          <div class="row-main"><div class="row-title">${esc(sec)}</div>
+          <div class="row-sub">${its.length} 問 · 平均習熟度 ${avg.toFixed(1)}</div></div>
+          <div class="row-arrow">→</div></button>`;}).join("")}
+    </div>`;
+  $("#bk").onclick=renderStudyRoot;
+  document.querySelectorAll(".row[data-sec]").forEach(r=>r.onclick=()=>renderRange(book,decodeURIComponent(r.dataset.sec)));
+}
+function renderRange(book,sec){
+  const cats=categoriesOf(book,sec);
+  const total=itemsOf(book,sec,null).length;
+  screen.innerHTML=`
+    <div class="navbar"><button class="back" id="bk">← セクション</button><div class="nav-title"><b>${esc(sec)}</b></div></div>
+    <div class="lt" style="font-size:22px">出題範囲を選ぶ</div>
+    <div class="lt-sub">${esc(book)}</div>
+    <button class="row accent" id="all">
+      <div class="row-main"><div class="row-title">セクション全体</div>
+      <div class="row-sub">${total} 問すべてをまとめて出題</div></div><div class="row-arrow">→</div></button>
+    <div class="divider"><span>品詞・形式で絞る</span></div>
+    <div class="grid2">
+      ${cats.map(cat=>{
+        const n=itemsOf(book,sec,cat).length;
+        return `<div class="set-card" data-cat="${encodeURIComponent(cat)}">
+          <h4>${esc(cat)}</h4><div class="cnt">${n} 問</div>
+          <div class="cat">${TYPE_LABEL[itemsOf(book,sec,cat)[0].type]||""}</div></div>`;}).join("")}
+    </div>`;
+  $("#bk").onclick=()=>renderSections(book);
+  const go=(items,label)=>renderFormSelect(shuffle(items),label,()=>renderRange(book,sec));
+  $("#all").onclick=()=>go(itemsOf(book,sec,null),`${sec}（全体）`);
+  document.querySelectorAll(".set-card[data-cat]").forEach(c=>c.onclick=()=>{
+    const cat=decodeURIComponent(c.dataset.cat);go(itemsOf(book,sec,cat),`${sec} · ${cat}`);});
+}
+
+/* ---- form hierarchy: 四択 / 記述 → submodes ---- */
+function renderFormSelect(queue,label,backFn){
+  sessionReturn=backFn;
+  const exN=queue.filter(hasExample).length;
+  const enN=queue.filter(canEnglishAnswer).length;
+  screen.innerHTML=`
+    <div class="navbar"><button class="back" id="bk">← 戻る</button><div class="nav-title"><b>${esc(label)}</b> · ${queue.length}問</div></div>
+    <div class="lt" style="font-size:22px">出題形式を選ぶ</div>
+    <div class="lt-sub">対応していない問題は自動で別形式に切り替わります。</div>
+    <button class="row" id="fMC">
+      <div class="row-main"><div class="row-title">四択</div>
+      <div class="row-sub">選択肢から答えを選ぶ</div></div><div class="row-arrow">→</div></button>
+    <button class="row" id="fWR" style="margin-top:10px">
+      <div class="row-main"><div class="row-title">記述</div>
+      <div class="row-sub">タイプして答える。綴りまで確認 · 習熟度ボーナス×1.2</div></div><div class="row-arrow">→</div></button>`;
+  $("#bk").onclick=backFn;
+  $("#fMC").onclick=()=>renderSubMode(queue,label,backFn,"mc",exN,enN);
+  $("#fWR").onclick=()=>renderSubMode(queue,label,backFn,"written",exN,enN);
+}
+function renderSubMode(queue,label,backFn,form,exN,enN){
+  const subs=form==="mc"
+    ?[{k:"en2ja",t:"英 → 日",d:"英語を見て意味を選ぶ",ok:true},
+      {k:"ja2en",t:"日 → 英",d:"意味を見て英語を選ぶ",ok:enN>0},
+      {k:"cloze_mc",t:"穴埋め",d:`例文の空所に入る語を選ぶ（対応 ${exN} 問）`,ok:exN>0}]
+    :[{k:"spell",t:"スペル入力",d:"意味を見て英語をタイプ",ok:enN>0},
+      {k:"cloze_type",t:"穴埋め記述",d:`例文の空所をタイプ（対応 ${exN} 問）`,ok:exN>0}];
+  screen.innerHTML=`
+    <div class="navbar"><button class="back" id="bk">← 形式</button><div class="nav-title"><b>${esc(label)}</b> · ${form==="mc"?"四択":"記述"}</div></div>
+    <div class="lt" style="font-size:22px">${form==="mc"?"四択の方式":"記述の方式"}</div>
+    <div class="lt-sub">&nbsp;</div>
+    <div class="list">
+      ${subs.map(m=>`<button class="row ${m.ok?"":"disabled"}" data-m="${m.k}">
+        <div class="row-main"><div class="row-title">${m.t}</div>
+        <div class="row-sub">${m.d}</div></div><div class="row-arrow">→</div></button>`).join("")}
+    </div>`;
+  $("#bk").onclick=()=>renderFormSelect(queue,label,backFn);
+  document.querySelectorAll(".row[data-m]").forEach(r=>r.onclick=()=>startQuiz(queue,label,r.dataset.m,backFn));
+}
+
+/* ---- review scopes ---- */
+function renderReviewScope(){
+  sessionReturn=renderReviewScope;
+  const q=reviewQueue(QUESTIONS,20);
+  screen.innerHTML=`
+    <div class="navbar"><button class="back" id="bk">← 学習</button><div class="nav-title"><b>復習</b></div></div>
+    <div class="lt" style="font-size:22px">復習の範囲</div>
+    <div class="lt-sub">習熟度が低い順・間違いが多い順に最大20問を出題します。</div>
+    <button class="row accent" id="cross">
+      <div class="row-main"><div class="row-title">全教材から弱点復習</div>
+      <div class="row-sub">${q.length>0?`今の復習対象：${q.length} 問`:"復習対象はありません"}</div></div>
+      <div class="row-arrow">→</div></button>
+    <button class="row" id="scoped" style="margin-top:10px">
+      <div class="row-main"><div class="row-title">範囲を選んで復習</div>
+      <div class="row-sub">教材・セクションを指定して弱点を復習</div></div><div class="row-arrow">→</div></button>`;
+  $("#bk").onclick=renderStudyRoot;
+  $("#cross").onclick=()=>{
+    if(!q.length){toast("復習対象がありません");return;}
+    renderFormSelect(q,"弱点復習（全教材）",renderReviewScope);
+  };
+  $("#scoped").onclick=renderReviewBooks;
+}
+function renderReviewBooks(){
+  screen.innerHTML=`
+    <div class="navbar"><button class="back" id="bk">← 復習</button><div class="nav-title"><b>範囲指定の復習</b></div></div>
+    <div class="lt" style="font-size:22px">教材を選ぶ</div>
+    <div class="lt-sub">&nbsp;</div>
+    <div class="list">
+      ${booksList().map(b=>`<button class="row" data-book="${encodeURIComponent(b)}">
+        <div class="row-main"><div class="row-title">${esc(b)}</div>
+        <div class="row-sub">復習対象 ${reviewQueue(itemsOf(b,null,null),999).length} 問</div></div>
+        <div class="row-arrow">→</div></button>`).join("")}
+    </div>`;
+  $("#bk").onclick=renderReviewScope;
+  document.querySelectorAll(".row[data-book]").forEach(r=>r.onclick=()=>renderReviewSections(decodeURIComponent(r.dataset.book)));
+}
+function renderReviewSections(book){
+  screen.innerHTML=`
+    <div class="navbar"><button class="back" id="bk">← 教材</button><div class="nav-title"><b>${esc(book)}</b></div></div>
+    <div class="lt" style="font-size:22px">セクションを選ぶ</div>
+    <div class="lt-sub">&nbsp;</div>
+    <button class="row accent" id="all">
+      <div class="row-main"><div class="row-title">この教材ぜんぶ</div>
+      <div class="row-sub">復習対象 ${reviewQueue(itemsOf(book,null,null),999).length} 問から最大20問</div></div>
+      <div class="row-arrow">→</div></button>
+    <div class="divider"><span>Sections</span></div>
+    <div class="list">
+      ${sectionsOf(book).map(sec=>{
+        const n=reviewQueue(itemsOf(book,sec,null),999).length;
+        return `<button class="row ${n?"":"disabled"}" data-sec="${encodeURIComponent(sec)}">
+          <div class="row-main"><div class="row-title">${esc(sec)}</div>
+          <div class="row-sub">復習対象 ${n} 問</div></div><div class="row-arrow">→</div></button>`;}).join("")}
+    </div>`;
+  $("#bk").onclick=renderReviewBooks;
+  const go=(items,label)=>{
+    const q=reviewQueue(items,20);
+    if(!q.length){toast("復習対象がありません");return;}
+    renderFormSelect(q,label,()=>renderReviewSections(book));
+  };
+  $("#all").onclick=()=>go(itemsOf(book,null,null),`復習 · ${book}`);
+  document.querySelectorAll(".row[data-sec]").forEach(r=>r.onclick=()=>{
+    const sec=decodeURIComponent(r.dataset.sec);go(itemsOf(book,sec,null),`復習 · ${sec}`);});
+}
+
+/* ---------- PROGRESS ---------- */
+function renderProgress(){
+  const c=masteryCounts(),total=uniqueWordCount();
+  // weak words: low level + many wrongs
+  const seen=new Set();
+  const words=[];
+  for(const it of QUESTIONS){
+    const k=wordKey(it);if(seen.has(k))continue;seen.add(k);
+    const p=getProg(k);
+    if(p.seen>0)words.push({it,p,lvl:levelOf(p)});
+  }
+  const weak=words.filter(w=>w.p.wrong>0||w.lvl<3)
+    .sort((a,b)=>b.p.wrong-a.p.wrong||a.lvl-b.lvl).slice(0,10);
+  // weak sections
+  const secMap={};
+  for(const it of QUESTIONS){
+    const key=it.book+" › "+it.section;
+    const p=getProg(wordKey(it));
+    (secMap[key]=secMap[key]||{lvl:0,n:0,wrong:0}).lvl+=levelOf(p);
+    secMap[key].n++;secMap[key].wrong+=p.wrong;
+  }
+  const weakSecs=Object.entries(secMap)
+    .map(([k,v])=>({k,avg:v.lvl/v.n,wrong:v.wrong,n:v.n}))
+    .sort((a,b)=>a.avg-b.avg||b.wrong-a.wrong).slice(0,5);
+  const totalSeen=words.reduce((a,w)=>a+w.p.seen,0);
+  const totalWrong=words.reduce((a,w)=>a+w.p.wrong,0);
+  const studiedDays=Object.keys(DAILY).length;
+
+  screen.innerHTML=`
+    <div class="lt-eyebrow">Progress</div>
+    <div class="lt">進捗</div>
+    <div class="lt-sub">単語ごとの習熟度と弱点を確認できます。</div>
+    <div class="stat-row">
+      <div class="s"><div class="n">${totalSeen}</div><div class="l">総回答</div></div>
+      <div class="s"><div class="n" style="color:var(--red)">${totalWrong}</div><div class="l">総ミス</div></div>
+      <div class="s"><div class="n" style="color:var(--gold)">${studiedDays}</div><div class="l">学習日数</div></div>
+    </div>
+    <div class="card">
+      <div class="ic">Mastery · ${total}語</div>
+      <div class="mbar">${c.map((n,i)=>`<div style="flex:${Math.max(n,0.001)};background:${LEVEL_COLORS[i]}"></div>`).join("")}</div>
+      <div class="mlegend">${c.map((n,i)=>`<span><span class="dot" style="background:${LEVEL_COLORS[i]}"></span>${LEVEL_NAMES[i]} ${n}</span>`).join("")}</div>
+    </div>
+    <div class="divider"><span>苦手な単語</span></div>
+    ${weak.length?`<div class="list">${weak.map(w=>`
+      <div class="row" style="cursor:default">
+        <div class="row-main"><div class="row-title">${esc(w.it.question)}</div>
+        <div class="row-sub">${esc(w.it.answer)} · ミス${w.p.wrong}回${w.p.help?` · ヒント${w.p.help}回`:""}</div></div>
+        <span class="lvl-badge lvl-${w.lvl}">${LEVEL_NAMES[w.lvl]}</span>
+      </div>`).join("")}</div>`
+    :`<div class="empty">まだ学習記録がありません。<br>学習を始めるとここに弱点が表示されます。</div>`}
+    <div class="divider"><span>苦手なセクション</span></div>
+    ${totalSeen?`<div class="list">${weakSecs.map(s=>`
+      <div class="row" style="cursor:default">
+        <div class="row-main"><div class="row-title" style="font-size:13.5px">${esc(s.k)}</div>
+        <div class="row-sub">平均習熟度 ${s.avg.toFixed(1)} · ミス${s.wrong}回 · ${s.n}問</div></div>
+      </div>`).join("")}</div>`
+    :`<div class="empty">学習するとセクション別の分析が表示されます。</div>`}`;
+}
+
+/* ---------- SETTINGS ---------- */
+function renderSettings(){
+  screen.innerHTML=`
+    <div class="lt-eyebrow">Settings</div>
+    <div class="lt">設定</div>
+    <div class="lt-sub">目標・データ・学習の設定を管理します。</div>
+
+    <div class="divider"><span>Goal</span></div>
+    <div class="field"><label>目標日（試験日など）</label>
+      <input type="date" id="goalDate" value="${esc(SETTINGS.goalDate)}"></div>
+
+    <div class="divider"><span>Learning</span></div>
+    <div class="toggle-row">
+      <div class="t-main"><div class="t-title">自動読み上げ</div>
+      <div class="t-sub">英→日の四択で単語を自動再生</div></div>
+      <button class="switch ${SETTINGS.autoPlay?'on':''}" id="apSwitch"></button>
+    </div>
+
+    <div class="divider"><span>Data</span></div>
+    <div class="list">
+      <button class="row" id="imp"><div class="row-main"><div class="row-title">問題データを読み込む</div>
+        <div class="row-sub">CSV / Excel(xlsx) · 現在 ${QUESTIONS.length} 問</div></div><div class="row-arrow">→</div></button>
+      <button class="row" id="exp"><div class="row-main"><div class="row-title">問題データを書き出す</div>
+        <div class="row-sub">編集後のデータをCSVで保存</div></div><div class="row-arrow">→</div></button>
+      <button class="row" id="edit"><div class="row-main"><div class="row-title">問題を編集する</div>
+        <div class="row-sub">単語・意味・例文をアプリ内で修正</div></div><div class="row-arrow">→</div></button>
+    </div>
+
+    <div class="divider"><span>Danger Zone</span></div>
+    <div class="list">
+      <button class="row" id="resetProg"><div class="row-main"><div class="row-title" style="color:var(--red)">学習記録をリセット</div>
+        <div class="row-sub">習熟度・履歴をすべて消去（問題は残ります）</div></div></button>
+      <button class="row" id="resetData"><div class="row-main"><div class="row-title" style="color:var(--red)">問題データを初期化</div>
+        <div class="row-sub">読み込んだデータを破棄して初期サンプルに戻す</div></div></button>
+    </div>
+    <p style="text-align:center;color:var(--sub);font-size:10.5px;letter-spacing:1.5px;margin-top:26px;font-family:'Archivo'">VOCAB · PHASE 1</p>`;
+
+  $("#goalDate").onchange=async e=>{SETTINGS.goalDate=e.target.value;await DB.put("kv","settings",SETTINGS);toast("目標日を保存しました");};
+  $("#apSwitch").onclick=async e=>{SETTINGS.autoPlay=!SETTINGS.autoPlay;await DB.put("kv","settings",SETTINGS);
+    e.currentTarget.classList.toggle("on",SETTINGS.autoPlay);};
+  $("#imp").onclick=()=>$("#fileInput").click();
+  $("#exp").onclick=()=>{
+    const blob=new Blob(["\uFEFF"+itemsToCSV(QUESTIONS)],{type:"text/csv"});
+    const a=document.createElement("a");a.href=URL.createObjectURL(blob);
+    a.download="vocab_questions.csv";a.click();URL.revokeObjectURL(a.href);
+    toast("CSVを書き出しました");
+  };
+  $("#edit").onclick=()=>renderEditorList("");
+  $("#resetProg").onclick=async()=>{
+    if(!confirm("学習記録（習熟度・履歴）をすべて消去します。よろしいですか？"))return;
+    await DB.clear("progress");PROG=new Map();DAILY={};await DB.put("kv","daily",DAILY);
+    toast("学習記録をリセットしました");renderSettings();
+  };
+  $("#resetData").onclick=async()=>{
+    if(!confirm("問題データを初期サンプルに戻します。よろしいですか？"))return;
+    QUESTIONS=loadCSVText(DEFAULT_CSV);await DB.put("kv","questions",QUESTIONS);
+    toast("初期データに戻しました");renderSettings();
+  };
+}
+
+/* ---- in-app editor ---- */
+function renderEditorList(query){
+  const q=query.toLowerCase();
+  const hits=QUESTIONS.map((it,i)=>({it,i}))
+    .filter(x=>!q||x.it.question.toLowerCase().includes(q)||x.it.answer.includes(query))
+    .slice(0,60);
+  screen.innerHTML=`
+    <div class="navbar"><button class="back" id="bk">← 設定</button><div class="nav-title"><b>問題の編集</b> · ${QUESTIONS.length}問</div></div>
+    <input class="search" id="srch" placeholder="単語・意味で検索" value="${esc(query)}">
+    <button class="btn ghost" id="add" style="margin-bottom:13px">＋ 新しい問題を追加</button>
+    <div class="list">
+      ${hits.map(x=>`<button class="row" data-i="${x.i}">
+        <div class="row-main"><div class="row-title">${esc(x.it.question)}</div>
+        <div class="row-sub">${esc(x.it.answer)} · ${esc(x.it.book)} › ${esc(x.it.section)}</div></div>
+        <div class="row-arrow">›</div></button>`).join("")}
+    </div>
+    ${hits.length>=60?`<div class="empty">60件まで表示。検索で絞り込んでください。</div>`:""}`;
+  $("#bk").onclick=renderSettings;
+  const s=$("#srch");
+  s.oninput=()=>renderEditorList(s.value);
+  setTimeout(()=>{if(query)s.focus();},0);
+  $("#add").onclick=()=>renderEditorForm(-1,query);
+  document.querySelectorAll(".row[data-i]").forEach(r=>r.onclick=()=>renderEditorForm(+r.dataset.i,query));
+}
+function renderEditorForm(idx,backQuery){
+  const isNew=idx<0;
+  const it=isNew?{book:booksList()[0]||"未分類",section:"その他",type:"word",category:"その他",
+    question:"",answer:"",choices:[],note:"",example:"",exampleJa:"",exampleAnswer:""}:QUESTIONS[idx];
+  const F=(label,id,val,ph)=>`<div class="field"><label>${label}</label>
+    <input id="${id}" value="${esc(val)}" placeholder="${ph||""}" autocapitalize="off" autocorrect="off"></div>`;
+  screen.innerHTML=`
+    <div class="navbar"><button class="back" id="bk">← 一覧</button>
+      <div class="nav-title"><b>${isNew?"新規追加":"編集"}</b></div></div>
+    ${F("英語（question）","fq",it.question)}
+    ${F("意味（answer）","fa",it.answer)}
+    <div class="field"><label>形式（type）</label>
+      <select id="ft">${["word","idiom","grammar","order"].map(t=>`<option value="${t}" ${it.type===t?"selected":""}>${t} — ${TYPE_LABEL[t]}</option>`).join("")}</select></div>
+    ${F("教材（book）","fb",it.book)}
+    ${F("セクション（section）","fs",it.section)}
+    ${F("品詞・分類（category）","fc",it.category)}
+    ${F("選択肢1（任意）","fc1",it.choices[0]||"")}
+    ${F("選択肢2（任意）","fc2",it.choices[1]||"")}
+    ${F("選択肢3（任意）","fc3",it.choices[2]||"")}
+    ${F("解説（note・任意）","fn",it.note)}
+    ${F("例文（example・空所は ____）","fe",it.example,"He ____ his fear.")}
+    ${F("例文の訳（example_ja）","fej",it.exampleJa)}
+    ${F("空所の答え（example_answer・活用形）","fea",it.exampleAnswer,"overcame")}
+    <button class="btn primary" id="save">保存する</button>
+    ${isNew?"":`<button class="btn danger" id="del">この問題を削除</button>`}`;
+  $("#bk").onclick=()=>renderEditorList(backQuery);
+  $("#save").onclick=async()=>{
+    const v=id=>$(id).value.trim();
+    if(!v("#fq")||!v("#fa")){toast("英語と意味は必須です");return;}
+    const next={book:v("#fb")||"未分類",section:v("#fs")||"その他",
+      type:$("#ft").value,category:v("#fc")||"その他",
+      question:v("#fq"),answer:v("#fa"),
+      choices:[v("#fc1"),v("#fc2"),v("#fc3")].filter(x=>x),
+      note:v("#fn"),example:v("#fe"),exampleJa:v("#fej"),exampleAnswer:v("#fea")};
+    if(isNew)QUESTIONS.push(next);else QUESTIONS[idx]=next;
+    await DB.put("kv","questions",QUESTIONS);
+    toast(isNew?"追加しました":"保存しました");
+    renderEditorList(backQuery);
+  };
+  const del=$("#del");
+  if(del)del.onclick=async()=>{
+    if(!confirm("この問題を削除しますか？"))return;
+    QUESTIONS.splice(idx,1);await DB.put("kv","questions",QUESTIONS);
+    toast("削除しました");renderEditorList(backQuery);
+  };
+}
+
+/* ---------- file import (CSV / xlsx) ---------- */
+$("#fileInput").addEventListener("change",e=>{
+  const f=e.target.files[0];if(!f)return;
+  const isXlsx=/\.(xlsx|xls)$/i.test(f.name);
+  const r=new FileReader();
+  r.onload=async()=>{
+    try{
+      let items;
+      if(isXlsx){
+        if(typeof XLSX==="undefined"){toast("Excel読込には初回のみ通信が必要です");return;}
+        const wb=XLSX.read(r.result,{type:"array"});
+        const ws=wb.Sheets[wb.SheetNames[0]];
+        const rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:false,defval:""});
+        items=rowsToItems(rows.filter(rw=>rw.some(c=>String(c).trim()!=="")));
+      }else{
+        items=loadCSVText(r.result);
+      }
+      if(!items.length){toast("有効な問題が見つかりません。列名をご確認ください");return;}
+      QUESTIONS=items;
+      await DB.put("kv","questions",QUESTIONS);
+      toast(`${items.length} 問を読み込みました`);
+      switchTab(currentTab);
+    }catch(err){console.error(err);toast("読み込みエラー：ファイル形式をご確認ください");}
+  };
+  if(isXlsx)r.readAsArrayBuffer(f);else r.readAsText(f,"utf-8");
+  e.target.value="";
+});
+
+/* ---------- init ---------- */
+(async function init(){
+  try{
+    await DB.open();
+    const saved=await DB.get("kv","questions");
+    QUESTIONS=(saved&&saved.length)?saved:loadCSVText(DEFAULT_CSV);
+    if(!saved)await DB.put("kv","questions",QUESTIONS);
+    const st=await DB.get("kv","settings");if(st)SETTINGS={...SETTINGS,...st};
+    const dl=await DB.get("kv","daily");if(dl)DAILY=dl;
+    PROG=new Map(await DB.entries("progress"));
+  }catch(err){
+    console.error("DB init failed",err);
+    QUESTIONS=loadCSVText(DEFAULT_CSV);
+  }
+  renderHome();
+})();
+
+/* ---------- service worker ---------- */
+if("serviceWorker" in navigator && location.protocol.startsWith("http")){
+  window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));
+}
+</script>
+</body>
+</html>
