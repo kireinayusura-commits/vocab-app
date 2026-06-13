@@ -107,6 +107,8 @@
   .lvl-1{background:rgba(90,169,255,.14);color:var(--blue);}
   .lvl-2{background:rgba(201,168,106,.15);color:var(--gold);}
   .lvl-3{background:rgba(61,220,132,.14);color:var(--green);}
+  .st-new{background:#23262e;color:var(--sub);}
+  .st-review{background:rgba(255,94,87,.15);color:var(--red);}
   .mbar{display:flex;height:10px;border-radius:99px;overflow:hidden;background:var(--panel-2);margin:12px 0 8px;}
   .mbar>div{height:100%;}
   .mlegend{display:flex;flex-wrap:wrap;gap:10px 16px;font-size:11px;color:var(--sub);}
@@ -448,12 +450,26 @@ const DB={
 };
 
 /* ---------- global state ---------- */
-let QUESTIONS=[];                 // all imported question rows
+let LIBRARY=[];                   // [{name, items:[...]}] 教材ライブラリ（複数ファイル）
+let QUESTIONS=[];                 // flattened view of all enabled books
 let PROG=new Map();               // wordKey -> progress record
 let SETTINGS={goalDate:"",autoPlay:true};
-let DAILY={};                     // "YYYY-MM-DD" -> {c,w}
+let DAILY={};                     // "YYYY-MM-DD" -> {c,w,tumbles,overcome}
 const $=s=>document.querySelector(s);
 const screen=$("#screen");
+
+// rebuild QUESTIONS from LIBRARY and persist
+async function syncLibrary(){
+  QUESTIONS=LIBRARY.flatMap(b=>b.items);
+  await DB.put("kv","library",LIBRARY);
+}
+// merge an imported file into the library by name (replace if same name)
+async function addBookToLibrary(name,items){
+  const i=LIBRARY.findIndex(b=>b.name===name);
+  if(i>=0)LIBRARY[i]={name,items};
+  else LIBRARY.push({name,items});
+  await syncLibrary();
+}
 
 function toast(msg){const t=$("#toast");t.textContent=msg;t.classList.add("show");clearTimeout(t._tm);t._tm=setTimeout(()=>t.classList.remove("show"),2200);}
 function esc(s){return String(s??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
@@ -512,35 +528,66 @@ function itemsToCSV(items){
 /* ---------- mastery engine ---------- */
 const LEVEL_NAMES=["未学習","学習中","定着中","マスター"];
 const LEVEL_COLORS=["#3a3f4a","var(--blue)","var(--gold)","var(--green)"];
+// 5-bucket view for the mastery bar (with つまずき)
+const BAR_NAMES=["未学習","つまずき","学習中","定着中","マスター"];
+const BAR_COLORS=["#3a3f4a","var(--red)","var(--blue)","var(--gold)","var(--green)"];
+// status -> badge {cls,label}
+function statusBadge(p){
+  const s=statusOf(p);
+  if(s===0)return {cls:"st-new",label:"未学習"};
+  if(s==="review")return {cls:"st-review",label:"つまずき"};
+  return {cls:"lvl-"+s,label:LEVEL_NAMES[s]};
+}
 function wordKey(it){return it.question.toLowerCase().replace(/~/g,"").replace(/\s+/g," ").trim();}
 function levelOf(p){const x=p?p.pts:0;return x>=3?3:x>=2?2:x>=1?1:0;}
-function getProg(k){return PROG.get(k)||{pts:0,wrong:0,help:0,lastDay:"",seen:0};}
+function getProg(k){return PROG.get(k)||{pts:0,wrong:0,help:0,lastDay:"",seen:0,needsReview:false};}
 async function saveProg(k,p){PROG.set(k,p);await DB.put("progress",k,p);}
+function dailyRec(){const d=todayStr();DAILY[d]=DAILY[d]||{c:0,w:0,tumbles:[],overcome:[]};
+  if(!DAILY[d].tumbles)DAILY[d].tumbles=[];if(!DAILY[d].overcome)DAILY[d].overcome=[];return DAILY[d];}
+let overcomeFlash=false;  // 直近の正解で「克服」が起きたか（演出用）
 async function recordCorrect(it,written){
+  overcomeFlash=false;
   const k=wordKey(it),p=getProg(k);p.seen++;
-  if(p.lastDay!==todayStr()){              // 1日1カウントまで
+  if(p.lastDay!==todayStr()){              // 1日1カウントまで（習熟度加点）
     p.pts=Math.min(4,+(p.pts+(written?1.2:1)).toFixed(2));
     p.lastDay=todayStr();
   }
-  await saveProg(k,p);await bumpDaily(true);
+  p.needsReview=false;                     // 正解で「要復習」解除
+  await saveProg(k,p);
+  const dr=dailyRec();dr.c++;
+  if(dr.tumbles.includes(k)&&!dr.overcome.includes(k)){dr.overcome.push(k);overcomeFlash=true;}
+  await DB.put("kv","daily",DAILY);
 }
 async function recordWrong(it){
   const k=wordKey(it),p=getProg(k);p.seen++;p.wrong++;
   p.pts=Math.max(0,levelOf(p)-1);          // 1段階降格
-  await saveProg(k,p);await bumpDaily(false);
-}
-async function recordHelp(it){              // 据え置き（レベル変化なし）
-  const k=wordKey(it),p=getProg(k);p.seen++;p.help++;p.wrong++;
-  await saveProg(k,p);await bumpDaily(false);
-}
-async function bumpDaily(ok){
-  const d=todayStr();DAILY[d]=DAILY[d]||{c:0,w:0};
-  ok?DAILY[d].c++:DAILY[d].w++;
+  p.needsReview=true;                      // 「つまずき(要復習)」状態に
+  await saveProg(k,p);
+  const dr=dailyRec();dr.w++;
+  if(!dr.tumbles.includes(k))dr.tumbles.push(k);
+  const oi=dr.overcome.indexOf(k);if(oi>=0)dr.overcome.splice(oi,1);
   await DB.put("kv","daily",DAILY);
 }
+async function recordHelp(it){              // 据え置き（レベル変化なし・要復習）
+  const k=wordKey(it),p=getProg(k);p.seen++;p.help++;p.wrong++;p.needsReview=true;
+  await saveProg(k,p);
+  const dr=dailyRec();dr.w++;
+  if(!dr.tumbles.includes(k))dr.tumbles.push(k);
+  await DB.put("kv","daily",DAILY);
+}
+// status: 0=未学習, "review"=つまずき(要復習), 1/2/3=習熟度
+function statusOf(p){
+  if(!p||p.seen===0)return 0;
+  const l=levelOf(p);
+  if(l===0&&p.needsReview)return "review";
+  return l;
+}
 function masteryCounts(){
-  const c=[0,0,0,0];const seen=new Set();
-  for(const it of QUESTIONS){const k=wordKey(it);if(seen.has(k))continue;seen.add(k);c[levelOf(getProg(k))]++;}
+  // [未学習, つまずき, 学習中, 定着中, マスター]
+  const c=[0,0,0,0,0];const seen=new Set();
+  for(const it of QUESTIONS){const k=wordKey(it);if(seen.has(k))continue;seen.add(k);
+    const s=statusOf(getProg(k));
+    if(s===0)c[0]++;else if(s==="review")c[1]++;else c[s+1]++;}
   return c;
 }
 function uniqueWordCount(){return new Set(QUESTIONS.map(wordKey)).size;}
@@ -682,7 +729,7 @@ function renderQ(){
   const mode=effectiveMode(item,s.chosenMode);
   const tlabel=TYPE_LABEL[item.type]||item.type;
   const modeLabel={en2ja:"英→日",ja2en:"日→英",spell:"記述",order:"並べ替え",cloze_mc:"穴埋め",cloze_type:"穴埋め記述"}[mode];
-  const lvl=levelOf(getProg(wordKey(item)));
+  const qbadge=statusBadge(getProg(wordKey(item)));
 
   let body="",prompt="",speakWord=null;
   if(mode==="order"){
@@ -728,7 +775,7 @@ function renderQ(){
     <div class="navbar">
       <button class="back" id="qquit">終了</button>
       <div class="nav-title"><b>${esc(s.label)}</b></div>
-      <span class="lvl-badge lvl-${lvl}">${LEVEL_NAMES[lvl]}</span>
+      <span class="lvl-badge ${qbadge.cls}">${qbadge.label}</span>
       <span class="mode-pill">${modeLabel}</span>
       ${mode==="en2ja"?`<button class="audio-toggle ${SETTINGS.autoPlay?'on':''}" id="autoBtn">${SETTINGS.autoPlay?'🔊':'🔇'}</button>`:""}
     </div>
@@ -856,7 +903,9 @@ function setupOrder(item){
 function finishAnswer(ok,item,msg,helpUsed){
   const s=session;
   const fb=$("#fb");
-  fb.innerHTML=esc(msg)+(item.note?`<span class="note">${esc(item.note)}</span>`:"");
+  let extra=item.note?`<span class="note">${esc(item.note)}</span>`:"";
+  if(ok&&overcomeFlash){msg="克服しました 🎉 "+msg;overcomeFlash=false;}
+  fb.innerHTML=esc(msg)+extra;
   fb.className="fb show "+(ok?"ok":"no");
   if(ok)s.score++;else s.wrong.push(item);
   const n=$("#next");n.classList.add("show");
@@ -921,8 +970,10 @@ document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>switchTab(b.dataset.t
 function renderHome(){
   const c=masteryCounts(),total=uniqueWordCount();
   const pace=paceInfo();
-  const d=DAILY[todayStr()]||{c:0,w:0};
-  const mastered=c[3];
+  const dr=DAILY[todayStr()]||{c:0,w:0,tumbles:[],overcome:[]};
+  const tumbles=(dr.tumbles||[]).length, overcome=(dr.overcome||[]).length;
+  const remainTumble=Math.max(0,tumbles-overcome);
+  const mastered=c[4];
   let goalCard;
   if(pace){
     goalCard=pace.past
@@ -936,29 +987,53 @@ function renderHome(){
     goalCard=`<div class="card hl" id="setGoal" style="cursor:pointer"><div class="ic">Goal</div>
       <h3>目標日を設定する</h3><p>試験日などを設定すると、1日に必要な学習ペースを逆算して表示します。</p></div>`;
   }
+  // today's focus card: 総学習 と 要復習 を主役に
+  const todayTotal=(dr.c||0)+(dr.w||0);
+  let todayNote,showReviewBtn=false;
+  if(todayTotal===0){
+    todayNote="学習を始めましょう。間違えた問題は要復習として追跡します。";
+  }else if(remainTumble===0&&tumbles>0){
+    todayNote="今日つまずいた問題はすべて克服しました 🎉";
+  }else if(remainTumble>0){
+    todayNote=`今日は ${todayTotal} 問を学習。復習待ちが <b style="color:var(--red)">${remainTumble}</b> 問あります。`;
+    showReviewBtn=true;
+  }else{
+    todayNote=`今日は ${todayTotal} 問を学習。復習待ちはありません。`;
+  }
+  const todayCard=`<div class="card"><div class="ic">Today</div>
+      <div class="stat-row" style="margin:6px 0 0;border:none;">
+        <div class="s" style="border:none"><div class="n">${todayTotal}</div><div class="l">総学習</div></div>
+        <div class="s"><div class="n" style="color:${remainTumble>0?'var(--red)':'var(--sub)'}">${remainTumble}</div><div class="l">要復習</div></div>
+        <div class="s"><div class="n" style="color:var(--green)">${overcome}</div><div class="l">克服</div></div>
+      </div>
+      <p style="margin-top:12px">${todayNote}</p>
+      ${showReviewBtn?`<button class="btn primary" id="clearTumble" style="margin-top:14px">要復習を復習する</button>`:""}
+    </div>`;
   screen.innerHTML=`
     <div class="lt-eyebrow">Vocab Trainer</div>
     <div class="lt">おかえりなさい</div>
-    <div class="lt-sub">${new Date().toLocaleDateString("ja-JP",{month:"long",day:"numeric",weekday:"long"})} · 収録 ${QUESTIONS.length} 問</div>
+    <div class="lt-sub">${new Date().toLocaleDateString("ja-JP",{month:"long",day:"numeric",weekday:"long"})} · ${LIBRARY.length}教材 ${QUESTIONS.length}問</div>
     ${goalCard}
-    <div class="card">
-      <div class="ic">Today</div>
-      <div class="stat-row" style="margin:8px 0 0;border:none;">
-        <div class="s" style="border:none"><div class="n" style="color:var(--green)">${d.c}</div><div class="l">正解</div></div>
-        <div class="s"><div class="n" style="color:var(--red)">${d.w}</div><div class="l">不正解</div></div>
-        <div class="s"><div class="n">${mastered}<span style="font-size:13px;color:var(--sub)">/${total}</span></div><div class="l">マスター</div></div>
-      </div>
-    </div>
+    ${todayCard}
     <div class="card">
       <div class="ic">Mastery</div>
-      <div class="mbar">${c.map((n,i)=>`<div style="flex:${Math.max(n,0.001)};background:${LEVEL_COLORS[i]}"></div>`).join("")}</div>
-      <div class="mlegend">${c.map((n,i)=>`<span><span class="dot" style="background:${LEVEL_COLORS[i]}"></span>${LEVEL_NAMES[i]} ${n}</span>`).join("")}</div>
+      <div class="mbar">${c.map((n,i)=>`<div style="flex:${Math.max(n,0.001)};background:${BAR_COLORS[i]}"></div>`).join("")}</div>
+      <div class="mlegend">${c.map((n,i)=>`<span><span class="dot" style="background:${BAR_COLORS[i]}"></span>${BAR_NAMES[i]} ${n}</span>`).join("")}</div>
     </div>
     <button class="btn primary" id="goStudy">学習を始める</button>
     <button class="btn ghost" id="goReview">弱点を復習する</button>`;
   $("#goStudy").onclick=()=>switchTab("study");
   $("#goReview").onclick=()=>{switchTab("study");renderReviewScope();};
   const sg=$("#setGoal");if(sg)sg.onclick=()=>switchTab("settings");
+  const ct=$("#clearTumble");if(ct)ct.onclick=()=>{switchTab("study");startTumbleReview();};
+}
+// 今日まだ克服していないつまずきだけを復習
+function startTumbleReview(){
+  const dr=DAILY[todayStr()]||{tumbles:[],overcome:[]};
+  const remain=new Set((dr.tumbles||[]).filter(k=>!(dr.overcome||[]).includes(k)));
+  const items=QUESTIONS.filter(it=>remain.has(wordKey(it)));
+  if(!items.length){toast("克服対象がありません");return;}
+  renderFormSelect(shuffle(items),"今日のつまずき復習",renderReviewScope);
 }
 
 /* ---------- STUDY (hierarchical) ---------- */
@@ -1138,26 +1213,34 @@ function renderReviewSections(book){
 /* ---------- PROGRESS ---------- */
 function renderProgress(){
   const c=masteryCounts(),total=uniqueWordCount();
-  // weak words: low level + many wrongs
+  // seen words only
   const seen=new Set();
   const words=[];
   for(const it of QUESTIONS){
     const k=wordKey(it);if(seen.has(k))continue;seen.add(k);
     const p=getProg(k);
-    if(p.seen>0)words.push({it,p,lvl:levelOf(p)});
+    if(p.seen>0)words.push({it,p,lvl:levelOf(p),st:statusOf(p)});
   }
-  const weak=words.filter(w=>w.p.wrong>0||w.lvl<3)
-    .sort((a,b)=>b.p.wrong-a.p.wrong||a.lvl-b.lvl).slice(0,10);
-  // weak sections
+  // weak words: つまずき優先 → ミス多い → 習熟度低い
+  const weak=words.filter(w=>w.st==="review"||w.p.wrong>0||w.lvl<3)
+    .sort((a,b)=>{
+      const ar=a.st==="review"?1:0,br=b.st==="review"?1:0;if(br-ar)return br-ar;
+      if(b.p.wrong-a.p.wrong)return b.p.wrong-a.p.wrong;
+      return a.lvl-b.lvl;
+    }).slice(0,10);
+  // weak sections — 回答済みの語だけで集計（未学習だけの節は除外）
+  const seenKeys=new Set(words.map(w=>wordKey(w.it)));
   const secMap={};
   for(const it of QUESTIONS){
+    if(!seenKeys.has(wordKey(it)))continue;
     const key=it.book+" › "+it.section;
     const p=getProg(wordKey(it));
-    (secMap[key]=secMap[key]||{lvl:0,n:0,wrong:0}).lvl+=levelOf(p);
-    secMap[key].n++;secMap[key].wrong+=p.wrong;
+    const m=(secMap[key]=secMap[key]||{lvl:0,n:0,wrong:0});
+    m.lvl+=levelOf(p);m.n++;m.wrong+=p.wrong;
   }
   const weakSecs=Object.entries(secMap)
     .map(([k,v])=>({k,avg:v.lvl/v.n,wrong:v.wrong,n:v.n}))
+    .filter(s=>s.avg<3||s.wrong>0)
     .sort((a,b)=>a.avg-b.avg||b.wrong-a.wrong).slice(0,5);
   const totalSeen=words.reduce((a,w)=>a+w.p.seen,0);
   const totalWrong=words.reduce((a,w)=>a+w.p.wrong,0);
@@ -1166,32 +1249,32 @@ function renderProgress(){
   screen.innerHTML=`
     <div class="lt-eyebrow">Progress</div>
     <div class="lt">進捗</div>
-    <div class="lt-sub">単語ごとの習熟度と弱点を確認できます。</div>
+    <div class="lt-sub">単語ごとの習熟度と、実際につまずいた弱点を確認できます。</div>
     <div class="stat-row">
       <div class="s"><div class="n">${totalSeen}</div><div class="l">総回答</div></div>
-      <div class="s"><div class="n" style="color:var(--red)">${totalWrong}</div><div class="l">総ミス</div></div>
+      <div class="s"><div class="n" style="color:var(--red)">${c[1]}</div><div class="l">要復習</div></div>
       <div class="s"><div class="n" style="color:var(--gold)">${studiedDays}</div><div class="l">学習日数</div></div>
     </div>
     <div class="card">
       <div class="ic">Mastery · ${total}語</div>
-      <div class="mbar">${c.map((n,i)=>`<div style="flex:${Math.max(n,0.001)};background:${LEVEL_COLORS[i]}"></div>`).join("")}</div>
-      <div class="mlegend">${c.map((n,i)=>`<span><span class="dot" style="background:${LEVEL_COLORS[i]}"></span>${LEVEL_NAMES[i]} ${n}</span>`).join("")}</div>
+      <div class="mbar">${c.map((n,i)=>`<div style="flex:${Math.max(n,0.001)};background:${BAR_COLORS[i]}"></div>`).join("")}</div>
+      <div class="mlegend">${c.map((n,i)=>`<span><span class="dot" style="background:${BAR_COLORS[i]}"></span>${BAR_NAMES[i]} ${n}</span>`).join("")}</div>
     </div>
     <div class="divider"><span>苦手な単語</span></div>
-    ${weak.length?`<div class="list">${weak.map(w=>`
+    ${weak.length?`<div class="list">${weak.map(w=>{const bd=statusBadge(w.p);return `
       <div class="row" style="cursor:default">
         <div class="row-main"><div class="row-title">${esc(w.it.question)}</div>
         <div class="row-sub">${esc(w.it.answer)} · ミス${w.p.wrong}回${w.p.help?` · ヒント${w.p.help}回`:""}</div></div>
-        <span class="lvl-badge lvl-${w.lvl}">${LEVEL_NAMES[w.lvl]}</span>
-      </div>`).join("")}</div>`
-    :`<div class="empty">まだ学習記録がありません。<br>学習を始めるとここに弱点が表示されます。</div>`}
+        <span class="lvl-badge ${bd.cls}">${bd.label}</span>
+      </div>`;}).join("")}</div>`
+    :`<div class="empty">${totalSeen?"苦手な単語はありません。順調です。":"まだ学習記録がありません。<br>学習を始めるとここに弱点が表示されます。"}</div>`}
     <div class="divider"><span>苦手なセクション</span></div>
-    ${totalSeen?`<div class="list">${weakSecs.map(s=>`
+    ${weakSecs.length?`<div class="list">${weakSecs.map(s=>`
       <div class="row" style="cursor:default">
         <div class="row-main"><div class="row-title" style="font-size:13.5px">${esc(s.k)}</div>
-        <div class="row-sub">平均習熟度 ${s.avg.toFixed(1)} · ミス${s.wrong}回 · ${s.n}問</div></div>
+        <div class="row-sub">平均習熟度 ${s.avg.toFixed(1)} · ミス${s.wrong}回 · 学習済み${s.n}問</div></div>
       </div>`).join("")}</div>`
-    :`<div class="empty">学習するとセクション別の分析が表示されます。</div>`}`;
+    :`<div class="empty">${totalSeen?"苦手なセクションはありません。":"学習するとセクション別の分析が表示されます。"}</div>`}`;
 }
 
 /* ---------- SETTINGS ---------- */
@@ -1214,10 +1297,12 @@ function renderSettings(){
 
     <div class="divider"><span>Data</span></div>
     <div class="list">
-      <button class="row" id="imp"><div class="row-main"><div class="row-title">問題データを読み込む</div>
-        <div class="row-sub">CSV / Excel(xlsx) · 現在 ${QUESTIONS.length} 問</div></div><div class="row-arrow">→</div></button>
-      <button class="row" id="exp"><div class="row-main"><div class="row-title">問題データを書き出す</div>
-        <div class="row-sub">編集後のデータをCSVで保存</div></div><div class="row-arrow">→</div></button>
+      <button class="row" id="library"><div class="row-main"><div class="row-title">教材を管理する</div>
+        <div class="row-sub">${LIBRARY.length} 教材 · 計 ${QUESTIONS.length} 問</div></div><div class="row-arrow">→</div></button>
+      <button class="row" id="imp"><div class="row-main"><div class="row-title">教材を読み込む（追加）</div>
+        <div class="row-sub">CSV / Excel(xlsx) · ファイル名が教材名になります</div></div><div class="row-arrow">→</div></button>
+      <button class="row" id="exp"><div class="row-main"><div class="row-title">全教材を書き出す</div>
+        <div class="row-sub">すべての問題をまとめてCSVで保存</div></div><div class="row-arrow">→</div></button>
       <button class="row" id="edit"><div class="row-main"><div class="row-title">問題を編集する</div>
         <div class="row-sub">単語・意味・例文をアプリ内で修正</div></div><div class="row-arrow">→</div></button>
     </div>
@@ -1234,6 +1319,7 @@ function renderSettings(){
   $("#goalDate").onchange=async e=>{SETTINGS.goalDate=e.target.value;await DB.put("kv","settings",SETTINGS);toast("目標日を保存しました");};
   $("#apSwitch").onclick=async e=>{SETTINGS.autoPlay=!SETTINGS.autoPlay;await DB.put("kv","settings",SETTINGS);
     e.currentTarget.classList.toggle("on",SETTINGS.autoPlay);};
+  $("#library").onclick=renderLibrary;
   $("#imp").onclick=()=>$("#fileInput").click();
   $("#exp").onclick=()=>{
     const blob=new Blob(["\uFEFF"+itemsToCSV(QUESTIONS)],{type:"text/csv"});
@@ -1248,10 +1334,43 @@ function renderSettings(){
     toast("学習記録をリセットしました");renderSettings();
   };
   $("#resetData").onclick=async()=>{
-    if(!confirm("問題データを初期サンプルに戻します。よろしいですか？"))return;
-    QUESTIONS=loadCSVText(DEFAULT_CSV);await DB.put("kv","questions",QUESTIONS);
+    if(!confirm("すべての教材を破棄して初期サンプルに戻します。よろしいですか？"))return;
+    LIBRARY=[{name:"サンプル教材",items:loadCSVText(DEFAULT_CSV)}];
+    await syncLibrary();
     toast("初期データに戻しました");renderSettings();
   };
+}
+
+/* ---- library (教材) management ---- */
+function renderLibrary(){
+  screen.innerHTML=`
+    <div class="navbar"><button class="back" id="bk">← 設定</button><div class="nav-title"><b>教材の管理</b></div></div>
+    <div class="lt" style="font-size:22px">教材ライブラリ</div>
+    <div class="lt-sub">複数の教材を同時に持てます。読み込むと一覧に追加されます。</div>
+    ${LIBRARY.length?`<div class="list">
+      ${LIBRARY.map((b,i)=>`<div class="row" style="cursor:default">
+        <div class="row-main"><div class="row-title">${esc(b.name)}</div>
+        <div class="row-sub">${b.items.length} 問</div></div>
+        <button class="audio-toggle" data-exp="${i}" style="margin-right:6px">書出</button>
+        <button class="audio-toggle" data-del="${i}" style="color:var(--red);border-color:var(--red)">削除</button>
+      </div>`).join("")}</div>`
+    :`<div class="empty">教材がありません。<br>「教材を読み込む」から追加してください。</div>`}
+    <button class="btn primary" id="add" style="margin-top:16px">＋ 教材を読み込む</button>`;
+  $("#bk").onclick=renderSettings;
+  $("#add").onclick=()=>$("#fileInput").click();
+  document.querySelectorAll("[data-exp]").forEach(b=>b.onclick=()=>{
+    const bk=LIBRARY[+b.dataset.exp];
+    const blob=new Blob(["\uFEFF"+itemsToCSV(bk.items)],{type:"text/csv"});
+    const a=document.createElement("a");a.href=URL.createObjectURL(blob);
+    a.download=bk.name+".csv";a.click();URL.revokeObjectURL(a.href);
+    toast("書き出しました");
+  });
+  document.querySelectorAll("[data-del]").forEach(b=>b.onclick=async()=>{
+    const i=+b.dataset.del;
+    if(!confirm(`「${LIBRARY[i].name}」を削除しますか？\n（学習記録は残ります）`))return;
+    LIBRARY.splice(i,1);await syncLibrary();
+    toast("削除しました");renderLibrary();
+  });
 }
 
 /* ---- in-app editor ---- */
@@ -1312,15 +1431,25 @@ function renderEditorForm(idx,backQuery){
       question:v("#fq"),answer:v("#fa"),
       choices:[v("#fc1"),v("#fc2"),v("#fc3")].filter(x=>x),
       note:v("#fn"),example:v("#fe"),exampleJa:v("#fej"),exampleAnswer:v("#fea")};
-    if(isNew)QUESTIONS.push(next);else QUESTIONS[idx]=next;
-    await DB.put("kv","questions",QUESTIONS);
+    if(isNew){
+      // add to the book matching the chosen book name, else first book
+      let b=LIBRARY.find(x=>x.name===next.book)||LIBRARY.find(x=>x.items.some(i=>i.book===next.book))||LIBRARY[0];
+      if(!b){b={name:next.book,items:[]};LIBRARY.push(b);}
+      b.items.push(next);
+    }else{
+      const target=QUESTIONS[idx];
+      for(const b of LIBRARY){const j=b.items.indexOf(target);if(j>=0){b.items[j]=next;break;}}
+    }
+    await syncLibrary();
     toast(isNew?"追加しました":"保存しました");
     renderEditorList(backQuery);
   };
   const del=$("#del");
   if(del)del.onclick=async()=>{
     if(!confirm("この問題を削除しますか？"))return;
-    QUESTIONS.splice(idx,1);await DB.put("kv","questions",QUESTIONS);
+    const target=QUESTIONS[idx];
+    for(const b of LIBRARY){const j=b.items.indexOf(target);if(j>=0){b.items.splice(j,1);break;}}
+    await syncLibrary();
     toast("削除しました");renderEditorList(backQuery);
   };
 }
@@ -1343,9 +1472,9 @@ $("#fileInput").addEventListener("change",e=>{
         items=loadCSVText(r.result);
       }
       if(!items.length){toast("有効な問題が見つかりません。列名をご確認ください");return;}
-      QUESTIONS=items;
-      await DB.put("kv","questions",QUESTIONS);
-      toast(`${items.length} 問を読み込みました`);
+      const bookName=f.name.replace(/\.(csv|xlsx|xls)$/i,"").trim()||"教材"+(LIBRARY.length+1);
+      await addBookToLibrary(bookName,items);
+      toast(`「${bookName}」を ${items.length} 問 追加しました`);
       switchTab(currentTab);
     }catch(err){console.error(err);toast("読み込みエラー：ファイル形式をご確認ください");}
   };
@@ -1357,15 +1486,23 @@ $("#fileInput").addEventListener("change",e=>{
 (async function init(){
   try{
     await DB.open();
-    const saved=await DB.get("kv","questions");
-    QUESTIONS=(saved&&saved.length)?saved:loadCSVText(DEFAULT_CSV);
-    if(!saved)await DB.put("kv","questions",QUESTIONS);
+    let lib=await DB.get("kv","library");
+    if(!lib||!lib.length){
+      // migrate from older single-questions storage, else seed default
+      const old=await DB.get("kv","questions");
+      const items=(old&&old.length)?old:loadCSVText(DEFAULT_CSV);
+      lib=[{name:"サンプル教材",items}];
+      await DB.put("kv","library",lib);
+    }
+    LIBRARY=lib;
+    QUESTIONS=LIBRARY.flatMap(b=>b.items);
     const st=await DB.get("kv","settings");if(st)SETTINGS={...SETTINGS,...st};
     const dl=await DB.get("kv","daily");if(dl)DAILY=dl;
     PROG=new Map(await DB.entries("progress"));
   }catch(err){
     console.error("DB init failed",err);
-    QUESTIONS=loadCSVText(DEFAULT_CSV);
+    LIBRARY=[{name:"サンプル教材",items:loadCSVText(DEFAULT_CSV)}];
+    QUESTIONS=LIBRARY.flatMap(b=>b.items);
   }
   renderHome();
 })();
