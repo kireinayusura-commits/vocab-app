@@ -145,8 +145,16 @@
   .speak.playing .wave{animation:pulse .7s ease-in-out infinite;}
   @keyframes pulse{0%,100%{opacity:.4;}50%{opacity:1;}}
 
-  .opts{display:flex;flex-direction:column;gap:10px;margin-top:22px;}
-  .opt{display:flex;align-items:center;gap:13px;text-align:left;width:100%;background:var(--panel);
+  .gate{margin-top:24px;display:flex;flex-direction:column;gap:11px;}
+  .gate-hint{text-align:center;font-size:12.5px;color:var(--sub);margin-bottom:4px;line-height:1.6;}
+  .gate-btn{width:100%;border:1px solid var(--line);background:var(--panel);color:var(--ink);
+    border-radius:14px;padding:17px;font-size:15.5px;font-weight:700;font-family:'Noto Sans JP';
+    cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;transition:.12s;}
+  .gate-btn:active{transform:scale(.985);}
+  .gate-btn.know{border-color:var(--green);color:var(--green);}
+  .gate-btn.unknown{border-color:var(--sub);color:var(--sub);}
+  .gate-btn .sub{font-size:11px;font-weight:400;opacity:.8;}
+  .opts{display:flex;flex-direction:column;gap:10px;margin-top:22px;}  .opt{display:flex;align-items:center;gap:13px;text-align:left;width:100%;background:var(--panel);
     border:1px solid var(--line);border-radius:14px;padding:15px;color:var(--ink);font-size:15px;
     font-weight:500;font-family:'Noto Sans JP';cursor:pointer;transition:.12s;}
   .opt:active:not(:disabled){transform:scale(.985);}
@@ -542,20 +550,29 @@ function wordKey(it){return it.question.toLowerCase().replace(/~/g,"").replace(/
 function levelOf(p){const x=p?p.pts:0;return x>=3?3:x>=2?2:x>=1?1:0;}
 function getProg(k){return PROG.get(k)||{pts:0,wrong:0,help:0,lastDay:"",seen:0,needsReview:false};}
 async function saveProg(k,p){PROG.set(k,p);await DB.put("progress",k,p);}
-function dailyRec(){const d=todayStr();DAILY[d]=DAILY[d]||{c:0,w:0,tumbles:[],overcome:[]};
-  if(!DAILY[d].tumbles)DAILY[d].tumbles=[];if(!DAILY[d].overcome)DAILY[d].overcome=[];return DAILY[d];}
+function dailyRec(){const d=todayStr();DAILY[d]=DAILY[d]||{c:0,w:0,tumbles:[],overcome:[],studied:[]};
+  if(!DAILY[d].tumbles)DAILY[d].tumbles=[];if(!DAILY[d].overcome)DAILY[d].overcome=[];
+  if(!DAILY[d].studied)DAILY[d].studied=[];return DAILY[d];}
+function markStudied(dr,k){if(!dr.studied.includes(k))dr.studied.push(k);}
 let overcomeFlash=false;  // 直近の正解で「克服」が起きたか（演出用）
-async function recordCorrect(it,written){
+// selfKnow: 2段階方式で「わからない」を申告したか（要復習寄りにする）
+async function recordCorrect(it,written,selfUnknown){
   overcomeFlash=false;
   const k=wordKey(it),p=getProg(k);p.seen++;
   if(p.lastDay!==todayStr()){              // 1日1カウントまで（習熟度加点）
     p.pts=Math.min(4,+(p.pts+(written?1.2:1)).toFixed(2));
     p.lastDay=todayStr();
   }
-  p.needsReview=false;                     // 正解で「要復習」解除
+  if(selfUnknown){
+    // 「わからない」と申告→正解でも要復習寄り（習熟度は据え置き扱いに戻す）
+    p.needsReview=true;
+  }else{
+    p.needsReview=false;                   // 正解で「要復習」解除
+  }
   await saveProg(k,p);
-  const dr=dailyRec();dr.c++;
-  if(dr.tumbles.includes(k)&&!dr.overcome.includes(k)){dr.overcome.push(k);overcomeFlash=true;}
+  const dr=dailyRec();dr.c++;markStudied(dr,k);
+  // 「わからない」申告時は克服にはカウントしない（理解できていないため）
+  if(!selfUnknown&&dr.tumbles.includes(k)&&!dr.overcome.includes(k)){dr.overcome.push(k);overcomeFlash=true;}
   await DB.put("kv","daily",DAILY);
 }
 async function recordWrong(it){
@@ -563,7 +580,7 @@ async function recordWrong(it){
   p.pts=Math.max(0,levelOf(p)-1);          // 1段階降格
   p.needsReview=true;                      // 「つまずき(要復習)」状態に
   await saveProg(k,p);
-  const dr=dailyRec();dr.w++;
+  const dr=dailyRec();dr.w++;markStudied(dr,k);
   if(!dr.tumbles.includes(k))dr.tumbles.push(k);
   const oi=dr.overcome.indexOf(k);if(oi>=0)dr.overcome.splice(oi,1);
   await DB.put("kv","daily",DAILY);
@@ -571,7 +588,7 @@ async function recordWrong(it){
 async function recordHelp(it){              // 据え置き（レベル変化なし・要復習）
   const k=wordKey(it),p=getProg(k);p.seen++;p.help++;p.wrong++;p.needsReview=true;
   await saveProg(k,p);
-  const dr=dailyRec();dr.w++;
+  const dr=dailyRec();dr.w++;markStudied(dr,k);
   if(!dr.tumbles.includes(k))dr.tumbles.push(k);
   await DB.put("kv","daily",DAILY);
 }
@@ -607,14 +624,20 @@ function paceInfo(){
 function reviewQueue(items,limit){
   return items
     .map(it=>({it,p:getProg(wordKey(it))}))
-    .filter(x=>levelOf(x.p)<3||x.p.wrong>0)
+    .filter(x=>x.p.needsReview||levelOf(x.p)<3||x.p.wrong>0)
     .sort((a,b)=>{
+      const ar=a.p.needsReview?1:0,br=b.p.needsReview?1:0;if(br-ar)return br-ar;
       const l=levelOf(a.p)-levelOf(b.p);if(l)return l;
       const w=b.p.wrong-a.p.wrong;if(w)return w;
       return (a.p.lastDay||"")<(b.p.lastDay||"")?-1:1;
     })
     .slice(0,limit||20).map(x=>x.it);
 }
+// 「要復習」リスト：間違えた／「わからない」と申告した単語（needsReview=true）
+function needsReviewItems(items){
+  return (items||QUESTIONS).filter(it=>getProg(wordKey(it)).needsReview);
+}
+function needsReviewCount(items){return needsReviewItems(items).length;}
 
 /* ---------- speech ---------- */
 const synth=window.speechSynthesis;
@@ -762,13 +785,18 @@ function renderQ(){
     body=`<div class="qword-wrap"><div class="qsentence">${clozeHTML(item)}</div>
       ${item.exampleJa?`<div class="qprompt-jp">${esc(item.exampleJa)}</div>`:""}</div>
       <div class="opts" id="opts"></div>`;
-  }else{ // en2ja
+  }else{ // en2ja  (2段階: わかる/わからない → 4択)
     const grammar=item.type==="grammar";
     prompt=grammar?"空所に入る語を選ぶ":(item.type==="idiom"?"この熟語の意味は？":"この単語の意味は？");
     speakWord=item.question;
     body=`<div class="qword-wrap"><div class="${grammar?"qsentence":"qword"}">${esc(item.question)}</div></div>
       <button class="speak" id="speak"><svg class="wave" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a9 9 0 0 1 0 14"/></svg><span>発音を聞く</span></button>
-      <div class="opts" id="opts"></div>`;
+      <div class="gate" id="gate">
+        <div class="gate-hint">まず意味を思い出してみましょう。<br>選択肢を見る前に、わかるか確認します。</div>
+        <button class="gate-btn know" id="gKnow">わかる<span class="sub">→ 4択で確認</span></button>
+        <button class="gate-btn unknown" id="gUnknown">わからない<span class="sub">→ 4択で確認（要復習に）</span></button>
+      </div>
+      <div class="opts" id="opts" style="display:none"></div>`;
   }
 
   screen.innerHTML=`
@@ -805,8 +833,18 @@ function renderQ(){
   else if(mode==="cloze_mc"){correct=clozeAnswer(item);choices=buildChoicesCloze(item,correct);}
   else{correct=item.answer;choices=buildChoices(item);}
   const keys=["A","B","C","D"];
-  $("#opts").innerHTML=choices.map((c,i)=>`<button class="opt" data-v="${encodeURIComponent(c)}"><span class="k">${keys[i]}</span><span>${esc(c)}</span></button>`).join("");
-  document.querySelectorAll(".opt").forEach(b=>b.onclick=()=>chooseMC(b,item,correct,mode));
+  const renderOpts=(selfUnknown)=>{
+    const opts=$("#opts");opts.style.display="flex";
+    opts.innerHTML=choices.map((c,i)=>`<button class="opt" data-v="${encodeURIComponent(c)}"><span class="k">${keys[i]}</span><span>${esc(c)}</span></button>`).join("");
+    opts.querySelectorAll(".opt").forEach(b=>b.onclick=()=>chooseMC(b,item,correct,mode,selfUnknown));
+  };
+  if(mode==="en2ja"){
+    // 2段階ゲート：わかる / わからない を選んでから選択肢を表示
+    $("#gKnow").onclick=()=>{$("#gate").remove();renderOpts(false);};
+    $("#gUnknown").onclick=()=>{$("#gate").remove();renderOpts(true);};
+  }else{
+    renderOpts(false);
+  }
   if(speakWord!==null){
     const sp=$("#speak");
     sp.onclick=()=>speak(speakWord,sp);
@@ -826,15 +864,17 @@ function paintMC(correct,picked){
     else b.classList.add("dim");
   });
 }
-async function chooseMC(btn,item,correct,mode){
+async function chooseMC(btn,item,correct,mode,selfUnknown){
   const s=session;if(s.answered)return;s.answered=true;
   const picked=decodeURIComponent(btn.dataset.v);
   const ok=picked===correct;
   paintMC(correct,btn);
   if(mode==="ja2en")speak(item.question,null);
   if(mode==="cloze_mc")speak(item.example.replace(/_{2,}/,clozeAnswer(item)),null);
-  if(ok)await recordCorrect(item,false);else await recordWrong(item);
-  finishAnswer(ok,item,ok?"CORRECT":"正解 → "+correct,false);
+  if(ok)await recordCorrect(item,false,selfUnknown);else await recordWrong(item);
+  let msg=ok?"CORRECT":"正解 → "+correct;
+  if(ok&&selfUnknown)msg="正解（要復習に追加）";  // わからない申告→正解でも復習対象
+  finishAnswer(ok,item,msg,false);
 }
 async function checkTyped(inp,item,mode){
   const s=session;if(s.answered)return;s.answered=true;
@@ -970,7 +1010,7 @@ document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>switchTab(b.dataset.t
 function renderHome(){
   const c=masteryCounts(),total=uniqueWordCount();
   const pace=paceInfo();
-  const dr=DAILY[todayStr()]||{c:0,w:0,tumbles:[],overcome:[]};
+  const dr=DAILY[todayStr()]||{c:0,w:0,tumbles:[],overcome:[],studied:[]};
   const tumbles=(dr.tumbles||[]).length, overcome=(dr.overcome||[]).length;
   const remainTumble=Math.max(0,tumbles-overcome);
   const mastered=c[4];
@@ -988,7 +1028,7 @@ function renderHome(){
       <h3>目標日を設定する</h3><p>試験日などを設定すると、1日に必要な学習ペースを逆算して表示します。</p></div>`;
   }
   // today's focus card: 総学習 と 要復習 を主役に
-  const todayTotal=(dr.c||0)+(dr.w||0);
+  const todayTotal=(dr.studied||[]).length;   // 今日取り組んだユニーク単語数
   let todayNote,showReviewBtn=false;
   if(todayTotal===0){
     todayNote="学習を始めましょう。間違えた問題は要復習として追跡します。";
@@ -1050,8 +1090,8 @@ function renderStudyRoot(){
     <div class="lt">学習</div>
     <div class="lt-sub">教材から範囲を選んで学習します。</div>
     <div class="card hl" id="reviewCard" style="cursor:pointer">
-      <div class="ic">Review</div><h3>弱点を復習する</h3>
-      <p>習熟度が低い・間違いが多い問題から優先的に出題します。</p>
+      <div class="ic">Review</div><h3>復習する</h3>
+      <p>${(()=>{const n=needsReviewCount();return n>0?`要復習が <b style="color:var(--gold)">${n}</b> 問あります。間違えた問題・わからなかった問題をまとめて復習できます。`:"間違えた問題・わからなかった問題をまとめて復習できます。";})()}</p>
     </div>
     <div class="divider"><span>Books</span></div>
     <div class="list">
@@ -1149,19 +1189,30 @@ function renderSubMode(queue,label,backFn,form,exN,enN){
 /* ---- review scopes ---- */
 function renderReviewScope(){
   sessionReturn=renderReviewScope;
-  const q=reviewQueue(QUESTIONS,20);
+  const review=needsReviewItems(QUESTIONS);    // 間違えた／わからない申告
+  const q=reviewQueue(QUESTIONS,20);           // 弱点全般（習熟度低い等も含む）
   screen.innerHTML=`
     <div class="navbar"><button class="back" id="bk">← 学習</button><div class="nav-title"><b>復習</b></div></div>
     <div class="lt" style="font-size:22px">復習の範囲</div>
-    <div class="lt-sub">習熟度が低い順・間違いが多い順に最大20問を出題します。</div>
-    <button class="row accent" id="cross">
+    <div class="lt-sub">間違えた問題と「わからない」と答えた問題は、要復習としてここにまとまります。</div>
+    <button class="row accent" id="needs">
+      <div class="row-main"><div class="row-title">要復習をまとめて学習</div>
+      <div class="row-sub">${review.length>0?`要復習：${review.length} 問（正解すると外れます）`:"要復習はありません 🎉"}</div></div>
+      <div class="row-arrow">→</div></button>
+    <div class="divider"><span>そのほかの復習</span></div>
+    <button class="row" id="cross">
       <div class="row-main"><div class="row-title">全教材から弱点復習</div>
-      <div class="row-sub">${q.length>0?`今の復習対象：${q.length} 問`:"復習対象はありません"}</div></div>
+      <div class="row-sub">${q.length>0?`習熟度が低い順・間違いが多い順に最大20問`:"対象はありません"}</div></div>
       <div class="row-arrow">→</div></button>
     <button class="row" id="scoped" style="margin-top:10px">
       <div class="row-main"><div class="row-title">範囲を選んで復習</div>
-      <div class="row-sub">教材・セクションを指定して弱点を復習</div></div><div class="row-arrow">→</div></button>`;
+      <div class="row-sub">教材・セクションを指定して復習</div></div><div class="row-arrow">→</div></button>`;
   $("#bk").onclick=renderStudyRoot;
+  $("#needs").onclick=()=>{
+    const r=needsReviewItems(QUESTIONS);
+    if(!r.length){toast("要復習はありません");return;}
+    renderFormSelect(shuffle(r),`要復習（${r.length}問）`,renderReviewScope);
+  };
   $("#cross").onclick=()=>{
     if(!q.length){toast("復習対象がありません");return;}
     renderFormSelect(q,"弱点復習（全教材）",renderReviewScope);
@@ -1252,7 +1303,7 @@ function renderProgress(){
     <div class="lt-sub">単語ごとの習熟度と、実際につまずいた弱点を確認できます。</div>
     <div class="stat-row">
       <div class="s"><div class="n">${totalSeen}</div><div class="l">総回答</div></div>
-      <div class="s"><div class="n" style="color:var(--red)">${c[1]}</div><div class="l">要復習</div></div>
+      <div class="s"><div class="n" style="color:var(--red)">${needsReviewCount()}</div><div class="l">要復習</div></div>
       <div class="s"><div class="n" style="color:var(--gold)">${studiedDays}</div><div class="l">学習日数</div></div>
     </div>
     <div class="card">
