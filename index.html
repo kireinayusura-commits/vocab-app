@@ -139,6 +139,8 @@
   .qmeta{display:flex;justify-content:space-between;font-family:'Archivo';font-size:11px;color:var(--sub);letter-spacing:1px;margin-bottom:20px;}
   .qtag{font-family:'Archivo';font-size:11px;letter-spacing:2px;color:var(--gold);text-transform:uppercase;margin-bottom:14px;text-align:center;}
   .qword-wrap{text-align:center;padding:8px 0 4px;animation:rise .35s cubic-bezier(.2,.8,.3,1);}
+  .qword-row{display:flex;align-items:center;justify-content:center;gap:12px;
+    padding:10px 0 2px;animation:rise .35s cubic-bezier(.2,.8,.3,1);}
   @keyframes rise{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:none;}}
   .qword{font-family:'Archivo';font-weight:700;font-size:clamp(24px,7.5vw,38px);letter-spacing:.5px;line-height:1.2;word-break:break-word;}
   .qsentence{font-size:clamp(16px,4.6vw,20px);font-weight:500;line-height:1.85;}
@@ -150,6 +152,13 @@
     padding:6px 10px;font-size:12px;cursor:pointer;}
   .audio-toggle.on{color:var(--gold);border-color:var(--gold);}
 
+  .speak-ic{flex:none;width:40px;height:40px;border-radius:50%;background:var(--panel);
+    border:1px solid var(--line);color:var(--sub);display:flex;align-items:center;justify-content:center;
+    cursor:pointer;transition:.12s;}
+  .speak-ic:active{transform:scale(.92);}
+  .speak-ic.playing{border-color:var(--gold);color:var(--gold);}
+  .speak-ic svg{width:18px;height:18px;}
+  .speak-ic.playing .wave{animation:pulse .7s ease-in-out infinite;}
   .speak{margin:14px auto 0;display:flex;align-items:center;gap:8px;background:var(--panel);
     border:1px solid var(--line);color:var(--sub);border-radius:99px;padding:8px 17px;font-size:12px;
     font-family:'Archivo';font-weight:700;letter-spacing:1px;cursor:pointer;}
@@ -158,7 +167,7 @@
   .speak.playing .wave{animation:pulse .7s ease-in-out infinite;}
   @keyframes pulse{0%,100%{opacity:.4;}50%{opacity:1;}}
 
-  .gate{margin-top:24px;display:flex;flex-direction:column;gap:11px;}
+  .gate{margin-top:18px;display:flex;flex-direction:column;gap:11px;}
   .gate-hint{text-align:center;font-size:12.5px;color:var(--sub);margin-bottom:4px;line-height:1.6;}
   .gate-btn{width:100%;border:1px solid var(--line);background:var(--panel);color:var(--ink);
     border-radius:14px;padding:17px;font-size:15.5px;font-weight:700;font-family:'Noto Sans JP';
@@ -867,12 +876,12 @@ function renderQ(){
       <div class="opts" id="opts"></div>`;
   }else{ // en2ja  (2段階: わかる/わからない → 4択)
     const grammar=item.type==="grammar";
-    prompt=grammar?"空所に入る語を選ぶ":(item.type==="idiom"?"この熟語の意味は？":"この単語の意味は？");
     speakWord=item.question;
-    body=`<div class="qword-wrap"><div class="${grammar?"qsentence":"qword"}">${esc(item.question)}</div></div>
-      <button class="speak" id="speak"><svg class="wave" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a9 9 0 0 1 0 14"/></svg><span>発音を聞く</span></button>
+    body=`<div class="qword-row">
+        <div class="${grammar?"qsentence":"qword"}">${esc(item.question)}</div>
+        <button class="speak-ic" id="speak" aria-label="発音を聞く"><svg class="wave" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a9 9 0 0 1 0 14"/></svg></button>
+      </div>
       <div class="gate" id="gate">
-        <div class="gate-hint">まず意味を思い出してみましょう。<br>選択肢を見る前に、わかるか確認します。</div>
         <button class="gate-btn know" id="gKnow">わかる<span class="sub">→ 4択で確認</span></button>
         <button class="gate-btn unknown" id="gUnknown">わからない<span class="sub">→ 4択で確認（要復習に）</span></button>
       </div>
@@ -889,7 +898,7 @@ function renderQ(){
     </div>
     <div class="track"><div style="width:${s.idx/s.total*100}%"></div></div>
     <div class="qmeta"><span>${String(s.idx+1).padStart(2,'0')} / ${String(s.total).padStart(2,'0')}</span><span>${tlabel}</span></div>
-    <div class="qtag">${prompt}</div>
+    ${(mode==="en2ja")?"":`<div class="qtag">${prompt}</div>`}
     ${(SETTINGS.timed&&mode==="en2ja")?`<div class="timer-bar" id="timerBar"><div id="timerFill"></div></div>`:""}
     ${body}
     <div class="fb" id="fb"></div>
@@ -1216,19 +1225,35 @@ function renderStudyRoot(){
   $("#mylistCard").onclick=renderMyLists;
   document.querySelectorAll(".row[data-book]").forEach(r=>r.onclick=()=>renderSections(decodeURIComponent(r.dataset.book)));
 }
+function sectionMastery(book,sec){
+  const counts=[0,0,0,0,0];const seen=new Set();
+  for(const it of itemsOf(book,sec,null)){
+    const k=wordKey(it);if(seen.has(k))continue;seen.add(k);
+    const st=statusOf(getProg(k));
+    if(st===0)counts[0]++;else if(st==="review")counts[1]++;else counts[st+1]++;
+  }
+  const tot=counts.reduce((a,b)=>a+b,0);
+  return {counts,tot,pct:tot?Math.round(counts[4]/tot*100):0};
+}
 function renderSections(book){
   screen.innerHTML=`
     <div class="navbar"><button class="back" id="bk">← 教材</button><div class="nav-title"><b>${esc(book)}</b></div></div>
     <div class="lt" style="font-size:22px">セクションを選ぶ</div>
-    <div class="lt-sub">セクション全体、または品詞・形式で絞り込めます。</div>
+    <div class="lt-sub">習熟度バーで進み具合を見ながら選べます。</div>
     <div class="list">
       ${sectionsOf(book).map(sec=>{
         const its=itemsOf(book,sec,null);
-        const avg=its.reduce((a,d)=>a+levelOf(getProg(wordKey(d))),0)/its.length;
-        return `<button class="row" data-sec="${encodeURIComponent(sec)}">
-          <div class="row-main"><div class="row-title">${esc(sec)}</div>
-          <div class="row-sub">${its.length} 問 · 平均習熟度 ${avg.toFixed(1)}</div></div>
-          <div class="row-arrow">→</div></button>`;}).join("")}
+        const m=sectionMastery(book,sec);
+        const pctColor=m.pct>=80?'var(--green)':m.pct>=40?'var(--gold)':'var(--sub)';
+        return `<button class="row sec-row" data-sec="${encodeURIComponent(sec)}">
+          <div class="row-main">
+            <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px">
+              <div class="row-title">${esc(sec)}</div>
+              <div style="font-family:'Archivo';font-size:13px;font-weight:800;color:${pctColor};flex:none">${m.pct}%</div>
+            </div>
+            <div class="mbar" style="margin:9px 0 5px">${m.counts.map((n,i)=>`<div style="flex:${Math.max(n,0.001)};background:${BAR_COLORS[i]}"></div>`).join("")}</div>
+            <div class="row-sub">${its.length} 問 · マスター ${m.counts[4]}／${m.tot}</div>
+          </div></button>`;}).join("")}
     </div>`;
   $("#bk").onclick=renderStudyRoot;
   document.querySelectorAll(".row[data-sec]").forEach(r=>r.onclick=()=>renderRange(book,decodeURIComponent(r.dataset.sec)));
@@ -1329,8 +1354,10 @@ function renderSubMode(queue,label,backFn,form,exN,enN){
 /* ---- MyList: 条件で動的に集める学習リスト ---- */
 function allCategories(){return uniq(QUESTIONS.map(d=>d.category));}
 function mylistItems(ml){
+  const secs=ml.sections||[];
   return QUESTIONS.filter(d=>
     (!ml.books.length||ml.books.includes(d.book))&&
+    (!secs.length||secs.includes(d.book+"\u241f"+d.section))&&
     (!ml.cats.length||ml.cats.includes(d.category))&&
     (!ml.types.length||ml.types.includes(d.type)));
 }
@@ -1340,12 +1367,14 @@ function renderMyLists(){
   screen.innerHTML=`
     <div class="navbar"><button class="back" id="bk">← 学習</button><div class="nav-title"><b>マイリスト</b></div></div>
     <div class="lt" style="font-size:22px">マイリスト学習</div>
-    <div class="lt-sub">教材・品詞・形式の条件で範囲を定義します。教材を追加すると、条件に合う問題が自動で増えます。</div>
+    <div class="lt-sub">教材・セクション・品詞・形式の条件で範囲を定義します。教材を追加すると、条件に合う問題が自動で増えます。</div>
     ${MYLISTS.length?`<div class="list">
       ${MYLISTS.map((ml,i)=>{const n=mylistItems(ml).length;
+        const secLabel=(ml.sections&&ml.sections.length)?[`${ml.sections.length}セクション`]:[];
+        const parts=[...(ml.books||[]),...secLabel,...(ml.cats||[]),...((ml.types||[]).map(t=>TYPE_LABEL[t]||t))];
         return `<button class="row" data-i="${i}">
           <div class="row-main"><div class="row-title">${esc(ml.name)}</div>
-          <div class="row-sub">${n} 問 · ${[...(ml.books||[]),...(ml.cats||[]),...(ml.types.map(t=>TYPE_LABEL[t]||t))].join("・")||"全体"}</div></div>
+          <div class="row-sub">${n} 問 · ${parts.join("・")||"全体"}</div></div>
           <div class="row-arrow">→</div></button>`;}).join("")}</div>`
     :`<div class="empty">まだマイリストがありません。<br>下のボタンから作成できます。</div>`}
     <button class="btn primary" id="add" style="margin-top:16px">＋ マイリストを作成</button>`;
@@ -1373,15 +1402,26 @@ function renderMyListDetail(i){
 }
 function renderMyListForm(i){
   const isNew=i<0;
-  const ml=isNew?{name:"",books:[],cats:[],types:[]}:JSON.parse(JSON.stringify(MYLISTS[i]));
+  const ml=isNew?{name:"",books:[],sections:[],cats:[],types:[]}:JSON.parse(JSON.stringify(MYLISTS[i]));
+  if(!ml.sections)ml.sections=[];
   const books=booksList(),cats=allCategories(),types=uniq(QUESTIONS.map(d=>d.type));
+  const SEP="\u241f";
   const chipRow=(arr,sel,attr)=>arr.map(v=>`<button class="filter-chip ${sel.includes(v)?'on':''}" data-${attr}="${encodeURIComponent(v)}">${esc(attr==='type'?(TYPE_LABEL[v]||v):v)}</button>`).join("");
+  // sections grouped by book; value is qualified "book␟section"
+  const secChips=()=>books.map(b=>{
+    const secs=sectionsOf(b);
+    return `<div style="font-size:11px;color:var(--sub);margin:8px 0 6px;font-family:'Archivo';letter-spacing:1px">${esc(b)}</div>
+      <div class="chips" style="margin-bottom:6px">${secs.map(sec=>{const q=b+SEP+sec;
+        return `<button class="filter-chip ${ml.sections.includes(q)?'on':''}" data-sec="${encodeURIComponent(q)}">${esc(sec)}</button>`;}).join("")}</div>`;
+  }).join("");
   screen.innerHTML=`
     <div class="navbar"><button class="back" id="bk">← 戻る</button><div class="nav-title"><b>${isNew?"新規マイリスト":"条件を編集"}</b></div></div>
     <div class="field"><label>リスト名</label>
-      <input id="mlName" value="${esc(ml.name)}" placeholder="例：全教材の動詞" autocapitalize="off"></div>
+      <input id="mlName" value="${esc(ml.name)}" placeholder="例：1〜2章の副詞" autocapitalize="off"></div>
     <div class="divider"><span>教材（未選択で全教材）</span></div>
     <div class="chips" id="bk_chips">${chipRow(books,ml.books,"book")}</div>
+    <div class="divider"><span>セクション（未選択で全セクション）</span></div>
+    <div id="sec_chips">${secChips()}</div>
     <div class="divider"><span>品詞・分類（未選択で全部）</span></div>
     <div class="chips" id="cat_chips">${chipRow(cats,ml.cats,"cat")}</div>
     <div class="divider"><span>形式（未選択で全部）</span></div>
@@ -1389,12 +1429,12 @@ function renderMyListForm(i){
     <div class="lt-sub" id="preview" style="margin:18px 0 0">条件に合致：${mylistItems(ml).length} 問</div>
     <button class="btn primary" id="save" style="margin-top:14px">保存する</button>`;
   $("#bk").onclick=()=>isNew?renderMyLists():renderMyListDetail(i);
-  const toggle=(attr,val)=>{const k=attr==="book"?"books":attr==="cat"?"cats":"types";
-    const arr=ml[k];const idx=arr.indexOf(val);if(idx>=0)arr.splice(idx,1);else arr.push(val);
-    $("#preview").textContent="条件に合致："+mylistItems(ml).length+" 問";};
-  document.querySelectorAll("[data-book]").forEach(c=>c.onclick=()=>{c.classList.toggle("on");toggle("book",decodeURIComponent(c.dataset.book));});
-  document.querySelectorAll("[data-cat]").forEach(c=>c.onclick=()=>{c.classList.toggle("on");toggle("cat",decodeURIComponent(c.dataset.cat));});
-  document.querySelectorAll("[data-type]").forEach(c=>c.onclick=()=>{c.classList.toggle("on");toggle("type",decodeURIComponent(c.dataset.type));});
+  const refresh=()=>{$("#preview").textContent="条件に合致："+mylistItems(ml).length+" 問";};
+  const toggle=(k,val)=>{const arr=ml[k];const idx=arr.indexOf(val);if(idx>=0)arr.splice(idx,1);else arr.push(val);refresh();};
+  document.querySelectorAll("[data-book]").forEach(c=>c.onclick=()=>{c.classList.toggle("on");toggle("books",decodeURIComponent(c.dataset.book));});
+  document.querySelectorAll("[data-sec]").forEach(c=>c.onclick=()=>{c.classList.toggle("on");toggle("sections",decodeURIComponent(c.dataset.sec));});
+  document.querySelectorAll("[data-cat]").forEach(c=>c.onclick=()=>{c.classList.toggle("on");toggle("cats",decodeURIComponent(c.dataset.cat));});
+  document.querySelectorAll("[data-type]").forEach(c=>c.onclick=()=>{c.classList.toggle("on");toggle("types",decodeURIComponent(c.dataset.type));});
   $("#save").onclick=async()=>{
     ml.name=$("#mlName").value.trim()||"無題のリスト";
     if(isNew){ml.id=Date.now();MYLISTS.push(ml);}else MYLISTS[i]=ml;
