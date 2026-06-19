@@ -81,6 +81,19 @@
   .set-card h4{font-size:13.5px;font-weight:700;margin-bottom:5px;line-height:1.4;}
   .set-card .cnt{font-size:11px;color:var(--sub);}
   .set-card .cat{font-size:10px;color:var(--gold);letter-spacing:1px;margin-top:6px;text-transform:uppercase;font-family:'Archivo';}
+  .set-card{position:relative;}
+  .set-card.sel{border-color:var(--gold);background:linear-gradient(180deg,#1d1c18,#15171c);}
+  .set-card .chk{position:absolute;top:10px;right:10px;width:20px;height:20px;border-radius:6px;
+    border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:12px;color:transparent;}
+  .set-card.sel .chk{background:var(--gold);border-color:var(--gold);color:#0c0d10;}
+  .count-chips{display:flex;gap:9px;margin-top:4px;}
+  .count-chip{flex:1;text-align:center;background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    padding:12px 6px;font-size:14px;font-weight:700;font-family:'Archivo';cursor:pointer;color:var(--sub);transition:.12s;}
+  .count-chip.on{border-color:var(--gold);color:var(--gold);background:linear-gradient(180deg,#1d1c18,#15171c);}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;}
+  .filter-chip{background:var(--panel);border:1px solid var(--line);border-radius:99px;padding:9px 15px;
+    font-size:13px;font-weight:600;font-family:'Noto Sans JP';color:var(--sub);cursor:pointer;transition:.12s;}
+  .filter-chip.on{border-color:var(--gold);color:var(--gold);background:linear-gradient(180deg,#1d1c18,#15171c);}
 
   .divider{display:flex;align-items:center;gap:13px;margin:22px 0 14px;}
   .divider span{font-family:'Archivo';font-size:10.5px;letter-spacing:2px;color:var(--sub);text-transform:uppercase;white-space:nowrap;}
@@ -166,6 +179,9 @@
   .opt.wrong .k{border-color:var(--red);color:var(--red);}
   .opt.dim{opacity:.4;}
   .opt:disabled{cursor:default;}
+  .recant{margin-top:4px;width:100%;background:none;border:1px dashed var(--line);color:var(--sub);
+    border-radius:12px;padding:11px;font-size:12.5px;font-family:'Noto Sans JP';cursor:pointer;}
+  .recant:active{transform:scale(.99);}
 
   .spell-wrap{margin-top:22px;}
   .spell-input{width:100%;background:var(--panel);border:1px solid var(--line);border-radius:14px;
@@ -197,10 +213,19 @@
   .fb.ok{color:var(--green);}
   .fb.no{color:var(--red);}
   .fb .note{display:block;color:var(--sub);font-size:12px;font-weight:400;margin-top:3px;}
-  .next{width:100%;border:none;cursor:pointer;font-family:'Archivo';font-weight:700;
-    font-size:13.5px;letter-spacing:2px;text-transform:uppercase;color:#0c0d10;padding:16px;border-radius:14px;
-    background:var(--gold);opacity:0;pointer-events:none;transition:opacity .25s;margin-top:18px;}
-  .next.show{opacity:1;pointer-events:auto;}
+  .next{position:fixed;left:50%;transform:translateX(-50%) translateY(8px);
+    bottom:calc(var(--tabbar-h) + var(--sab) + 14px);z-index:40;
+    width:min(calc(100% - 40px),480px);border:none;cursor:pointer;font-family:'Archivo';font-weight:700;
+    font-size:14px;letter-spacing:2px;text-transform:uppercase;color:#0c0d10;padding:17px;border-radius:14px;
+    background:var(--gold);box-shadow:0 8px 24px rgba(0,0,0,.45);
+    opacity:0;pointer-events:none;transition:opacity .2s, transform .2s;}
+  .next.show{opacity:1;pointer-events:auto;transform:translateX(-50%) translateY(0);}
+  /* give quiz content room so fixed NEXT never overlaps the last option */
+  .quiz-pad{padding-bottom:78px;}
+  .timer-bar{height:5px;background:var(--panel-2);border-radius:99px;overflow:hidden;margin:-8px 0 18px;}
+  .timer-bar>div{height:100%;width:100%;background:var(--green);transition:width .1s linear;}
+  .timer-bar>div.warn{background:var(--gold);}
+  .timer-bar>div.danger{background:var(--red);}
 
   /* ---- result ---- */
   .result{text-align:center;animation:rise .4s;padding-top:8px;}
@@ -253,6 +278,7 @@
 </nav>
 <div class="toast" id="toast"></div>
 <input type="file" id="fileInput" accept=".csv,.xlsx,.xls" style="display:none">
+<input type="file" id="restoreInput" accept=".json,application/json" style="display:none">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
 <script>
 /* ================================================================
@@ -459,9 +485,10 @@ const DB={
 
 /* ---------- global state ---------- */
 let LIBRARY=[];                   // [{name, items:[...]}] 教材ライブラリ（複数ファイル）
+let MYLISTS=[];                   // [{id,name,books:[],cats:[],types:[]}] 条件で動的に集めるリスト
 let QUESTIONS=[];                 // flattened view of all enabled books
 let PROG=new Map();               // wordKey -> progress record
-let SETTINGS={goalDate:"",autoPlay:true};
+let SETTINGS={goalDate:"",autoPlay:true,goalScope:{books:[],cats:[]},speechRate:0.92,timed:false,timeSec:8};
 let DAILY={};                     // "YYYY-MM-DD" -> {c,w,tumbles,overcome}
 const $=s=>document.querySelector(s);
 const screen=$("#screen");
@@ -592,6 +619,13 @@ async function recordHelp(it){              // 据え置き（レベル変化な
   if(!dr.tumbles.includes(k))dr.tumbles.push(k);
   await DB.put("kv","daily",DAILY);
 }
+async function recordTimeout(it){           // 時間切れ：不正解にせず（降格なし）要復習に
+  const k=wordKey(it),p=getProg(k);p.seen++;p.needsReview=true;
+  await saveProg(k,p);
+  const dr=dailyRec();markStudied(dr,k);
+  if(!dr.tumbles.includes(k))dr.tumbles.push(k);
+  await DB.put("kv","daily",DAILY);
+}
 // status: 0=未学習, "review"=つまずき(要復習), 1/2/3=習熟度
 function statusOf(p){
   if(!p||p.seen===0)return 0;
@@ -608,18 +642,34 @@ function masteryCounts(){
   return c;
 }
 function uniqueWordCount(){return new Set(QUESTIONS.map(wordKey)).size;}
-function remainingCorrects(){               // master(3pt)までに必要な正解回数の概算
+function goalItems(){
+  const sc=SETTINGS.goalScope||{books:[],cats:[]};
+  return QUESTIONS.filter(d=>
+    (!sc.books||!sc.books.length||sc.books.includes(d.book))&&
+    (!sc.cats||!sc.cats.length||sc.cats.includes(d.category)));
+}
+function remainingCorrects(){               // master(3pt)までに必要な正解回数の概算（目標範囲内）
   let sum=0;const seen=new Set();
-  for(const it of QUESTIONS){const k=wordKey(it);if(seen.has(k))continue;seen.add(k);
+  for(const it of goalItems()){const k=wordKey(it);if(seen.has(k))continue;seen.add(k);
     sum+=Math.max(0,Math.ceil(3-getProg(k).pts));}
   return sum;
+}
+function goalTotalWords(){return new Set(goalItems().map(wordKey)).size;}
+function goalMastered(){
+  const seen=new Set();let m=0;
+  for(const it of goalItems()){const k=wordKey(it);if(seen.has(k))continue;seen.add(k);
+    if(levelOf(getProg(k))>=3)m++;}
+  return m;
 }
 function paceInfo(){
   if(!SETTINGS.goalDate)return null;
   const goal=new Date(SETTINGS.goalDate+"T23:59:59");
   const days=Math.max(1,Math.ceil((goal-new Date())/86400000));
   const rem=remainingCorrects();
-  return {days,rem,perDay:Math.ceil(rem/days),past:goal<new Date()};
+  const sc=SETTINGS.goalScope||{books:[],cats:[]};
+  const scoped=(sc.books&&sc.books.length)||(sc.cats&&sc.cats.length);
+  return {days,rem,perDay:Math.ceil(rem/days),past:goal<new Date(),
+    total:goalTotalWords(),mastered:goalMastered(),scoped};
 }
 function reviewQueue(items,limit){
   return items
@@ -645,8 +695,18 @@ let enVoice=null;
 function pickVoice(){
   if(!synth)return;
   const vs=synth.getVoices().filter(v=>/^en(-|_|$)/i.test(v.lang));
-  enVoice=vs.find(v=>/Samantha/i.test(v.name))||vs.find(v=>/Google US English/i.test(v.name))
-    ||vs.find(v=>/en-US/i.test(v.lang))||vs[0]||null;
+  // 高品質な声を優先（iOSのSiri/Enhanced、各社の高品質音声）
+  const score=v=>{
+    let s=0;const n=v.name||"";
+    if(/siri/i.test(n))s+=6;
+    if(/enhanced|premium|neural/i.test(n))s+=5;
+    if(/Samantha|Ava|Allison|Serena|Daniel|Karen|Moira/i.test(n))s+=3;
+    if(/Google US English/i.test(n))s+=2;
+    if(/en-US/i.test(v.lang))s+=1;
+    if(v.localService)s+=1;          // 端末内＝オフラインで安定
+    return s;
+  };
+  enVoice=vs.slice().sort((a,b)=>score(b)-score(a))[0]||null;
 }
 if(synth){pickVoice();synth.onvoiceschanged=pickVoice;}
 function speak(text,btn){
@@ -655,7 +715,7 @@ function speak(text,btn){
   const clean=String(text).replace(/_{2,}/g," blank ").replace(/~/g," ").replace(/\s+/g," ").trim();
   const u=new SpeechSynthesisUtterance(clean);
   if(enVoice)u.voice=enVoice;
-  u.lang=(enVoice&&enVoice.lang)||"en-US";u.rate=.92;
+  u.lang=(enVoice&&enVoice.lang)||"en-US";u.rate=SETTINGS.speechRate||0.92;
   if(btn){btn.classList.add("playing");u.onend=u.onerror=()=>btn.classList.remove("playing");}
   synth.speak(u);
 }
@@ -735,11 +795,31 @@ const WRITTEN_MODES=new Set(["spell","cloze_type"]);
    QUIZ SESSION
 ================================================================ */
 let session=null;
+let _timer=null;
+function stopTimer(){if(_timer){clearInterval(_timer);_timer=null;}}
+// start a countdown bar; calls onExpire() when time runs out
+function startTimer(onExpire){
+  stopTimer();
+  if(!SETTINGS.timed)return;
+  const fill=$("#timerFill");if(!fill)return;
+  const total=(SETTINGS.timeSec||8)*1000;
+  let start=Date.now();
+  fill.style.width="100%";fill.className="";
+  _timer=setInterval(()=>{
+    const elapsed=Date.now()-start;
+    const left=Math.max(0,total-elapsed);
+    const pct=left/total*100;
+    fill.style.width=pct+"%";
+    fill.className=pct<25?"danger":pct<50?"warn":"";
+    if(left<=0){stopTimer();onExpire&&onExpire();}
+  },100);
+}
 function startQuiz(queue,label,chosenMode,returnTo){
   session={queue,label,chosenMode,returnTo,idx:0,score:0,total:queue.length,wrong:[],answered:false};
   renderQ();
 }
 function quitQuiz(){
+  stopTimer();
   if(synth)synth.cancel();
   session=null;
   (sessionReturn||renderStudyRoot)();
@@ -810,8 +890,10 @@ function renderQ(){
     <div class="track"><div style="width:${s.idx/s.total*100}%"></div></div>
     <div class="qmeta"><span>${String(s.idx+1).padStart(2,'0')} / ${String(s.total).padStart(2,'0')}</span><span>${tlabel}</span></div>
     <div class="qtag">${prompt}</div>
+    ${(SETTINGS.timed&&mode==="en2ja")?`<div class="timer-bar" id="timerBar"><div id="timerFill"></div></div>`:""}
     ${body}
     <div class="fb" id="fb"></div>
+    <div class="quiz-pad"></div>
     <button class="next" id="next">NEXT →</button>`;
   window.scrollTo(0,0);
 
@@ -833,15 +915,36 @@ function renderQ(){
   else if(mode==="cloze_mc"){correct=clozeAnswer(item);choices=buildChoicesCloze(item,correct);}
   else{correct=item.answer;choices=buildChoices(item);}
   const keys=["A","B","C","D"];
+  // reveal answer on timeout (gentle: 要復習, no demotion)
+  const onChoiceTimeout=async(correct)=>{
+    const s=session;if(s.answered)return;s.answered=true;
+    stopTimer();
+    document.querySelectorAll(".opt").forEach(b=>{b.disabled=true;
+      const v=decodeURIComponent(b.dataset.v);
+      if(v===correct)b.classList.add("correct");else b.classList.add("dim");});
+    const rc=$("#recant");if(rc)rc.remove();
+    speak(correct===item.question?item.question:item.question,null);
+    await recordTimeout(item);
+    finishAnswer(false,item,"時間切れ → "+correct+"（要復習に追加）",false);
+  };
   const renderOpts=(selfUnknown)=>{
     const opts=$("#opts");opts.style.display="flex";
-    opts.innerHTML=choices.map((c,i)=>`<button class="opt" data-v="${encodeURIComponent(c)}"><span class="k">${keys[i]}</span><span>${esc(c)}</span></button>`).join("");
-    opts.querySelectorAll(".opt").forEach(b=>b.onclick=()=>chooseMC(b,item,correct,mode,selfUnknown));
+    let html=choices.map((c,i)=>`<button class="opt" data-v="${encodeURIComponent(c)}"><span class="k">${keys[i]}</span><span>${esc(c)}</span></button>`).join("");
+    // 「わかる」で開いた直後だけ、やっぱりわからない の逃げ道を出す
+    if(mode==="en2ja"&&!selfUnknown)html+=`<button class="recant" id="recant">やっぱりわからない</button>`;
+    opts.innerHTML=html;
+    opts.querySelectorAll(".opt").forEach(b=>b.onclick=()=>{stopTimer();chooseMC(b,item,correct,mode,selfUnknown);});
+    const rc=$("#recant");
+    if(rc)rc.onclick=()=>{stopTimer();renderOpts(true);};   // 要復習扱いに切り替えて選択肢を出し直す
+    // 選択肢提示後の制限時間（en2jaのみ）
+    if(SETTINGS.timed&&mode==="en2ja")startTimer(()=>onChoiceTimeout(correct));
   };
   if(mode==="en2ja"){
     // 2段階ゲート：わかる / わからない を選んでから選択肢を表示
-    $("#gKnow").onclick=()=>{$("#gate").remove();renderOpts(false);};
-    $("#gUnknown").onclick=()=>{$("#gate").remove();renderOpts(true);};
+    $("#gKnow").onclick=()=>{stopTimer();$("#gate").remove();renderOpts(false);};
+    $("#gUnknown").onclick=()=>{stopTimer();$("#gate").remove();renderOpts(true);};
+    // ゲート段階の制限時間：時間切れで自動的に「わからない」へ
+    if(SETTINGS.timed)startTimer(()=>{const g=$("#gate");if(g)g.remove();renderOpts(true);});
   }else{
     renderOpts(false);
   }
@@ -952,6 +1055,7 @@ function finishAnswer(ok,item,msg,helpUsed){
   n.textContent=(s.idx+1>=s.total)?"結果を見る →":"NEXT →";
 }
 function advance(){
+  stopTimer();
   if(synth)synth.cancel();
   const s=session;s.idx++;
   if(s.idx>=s.total)renderResult();else renderQ();
@@ -999,6 +1103,7 @@ function renderResult(){
 ================================================================ */
 let currentTab="home";
 function switchTab(tab){
+  stopTimer();
   currentTab=tab;session=null;if(synth)synth.cancel();
   document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active",b.dataset.tab===tab));
   ({home:renderHome,study:renderStudyRoot,progress:renderProgress,settings:renderSettings})[tab]();
@@ -1016,16 +1121,17 @@ function renderHome(){
   const mastered=c[4];
   let goalCard;
   if(pace){
+    const scopeLabel=pace.scoped?"設定範囲":"全";
     goalCard=pace.past
       ?`<div class="card hl"><div class="ic">Goal</div><h3>目標日を過ぎました</h3>
-        <p>マスター ${mastered}/${total} 語。設定から新しい目標日を設定できます。</p></div>`
+        <p>マスター ${pace.mastered}/${pace.total} 語（${scopeLabel}）。設定から新しい目標日を設定できます。</p></div>`
       :`<div class="card hl"><div class="ic">D-${pace.days}</div>
         <h3>目標まで残り ${pace.days} 日</h3>
-        <p>全${total}語マスターまで、あと正解 <b style="color:var(--gold)">${pace.rem}</b> 回。<br>
+        <p>${scopeLabel}${pace.total}語マスターまで、あと正解 <b style="color:var(--gold)">${pace.rem}</b> 回（${pace.mastered}/${pace.total} 達成）。<br>
         必要ペースは <b style="color:var(--gold)">1日 ${pace.perDay} 回</b> の正解です。</p></div>`;
   }else{
     goalCard=`<div class="card hl" id="setGoal" style="cursor:pointer"><div class="ic">Goal</div>
-      <h3>目標日を設定する</h3><p>試験日などを設定すると、1日に必要な学習ペースを逆算して表示します。</p></div>`;
+      <h3>目標を設定する</h3><p>試験日と範囲を設定すると、1日に必要な学習ペースを逆算して表示します。</p></div>`;
   }
   // today's focus card: 総学習 と 要復習 を主役に
   const todayTotal=(dr.studied||[]).length;   // 今日取り組んだユニーク単語数
@@ -1093,6 +1199,10 @@ function renderStudyRoot(){
       <div class="ic">Review</div><h3>復習する</h3>
       <p>${(()=>{const n=needsReviewCount();return n>0?`要復習が <b style="color:var(--gold)">${n}</b> 問あります。間違えた問題・わからなかった問題をまとめて復習できます。`:"間違えた問題・わからなかった問題をまとめて復習できます。";})()}</p>
     </div>
+    <button class="row" id="mylistCard" style="margin-bottom:14px">
+      <div class="row-main"><div class="row-title">マイリスト学習</div>
+      <div class="row-sub">${MYLISTS.length?`${MYLISTS.length} 件のリスト`:"教材・品詞をまたいで自分の範囲を作成"}</div></div>
+      <div class="row-arrow">→</div></button>
     <div class="divider"><span>Books</span></div>
     <div class="list">
       ${books.map(b=>{
@@ -1103,6 +1213,7 @@ function renderStudyRoot(){
           <div class="row-arrow">→</div></button>`;}).join("")}
     </div>`;
   $("#reviewCard").onclick=renderReviewScope;
+  $("#mylistCard").onclick=renderMyLists;
   document.querySelectorAll(".row[data-book]").forEach(r=>r.onclick=()=>renderSections(decodeURIComponent(r.dataset.book)));
 }
 function renderSections(book){
@@ -1125,26 +1236,55 @@ function renderSections(book){
 function renderRange(book,sec){
   const cats=categoriesOf(book,sec);
   const total=itemsOf(book,sec,null).length;
+  let selected=new Set();          // 選択中の品詞（空＝全体）
+  let limit=0;                     // 0=全部
+  const countItems=()=>{
+    const base=selected.size===0?itemsOf(book,sec,null):itemsOf(book,sec,null).filter(d=>selected.has(d.category));
+    return base;
+  };
   screen.innerHTML=`
     <div class="navbar"><button class="back" id="bk">← セクション</button><div class="nav-title"><b>${esc(sec)}</b></div></div>
     <div class="lt" style="font-size:22px">出題範囲を選ぶ</div>
-    <div class="lt-sub">${esc(book)}</div>
-    <button class="row accent" id="all">
-      <div class="row-main"><div class="row-title">セクション全体</div>
-      <div class="row-sub">${total} 問すべてをまとめて出題</div></div><div class="row-arrow">→</div></button>
-    <div class="divider"><span>品詞・形式で絞る</span></div>
-    <div class="grid2">
+    <div class="lt-sub">${esc(book)} · 品詞は複数選べます（未選択で全体）</div>
+    <div class="grid2" id="catGrid">
       ${cats.map(cat=>{
         const n=itemsOf(book,sec,cat).length;
         return `<div class="set-card" data-cat="${encodeURIComponent(cat)}">
+          <div class="chk">✓</div>
           <h4>${esc(cat)}</h4><div class="cnt">${n} 問</div>
           <div class="cat">${TYPE_LABEL[itemsOf(book,sec,cat)[0].type]||""}</div></div>`;}).join("")}
-    </div>`;
+    </div>
+    <div class="divider"><span>出題数</span></div>
+    <div class="count-chips" id="countChips">
+      <div class="count-chip on" data-lim="0">全部</div>
+      <div class="count-chip" data-lim="20">20問</div>
+      <div class="count-chip" data-lim="10">10問</div>
+    </div>
+    <button class="btn primary" id="start" style="margin-top:20px">この範囲で学習（<span id="cnt">${total}</span>問）</button>`;
   $("#bk").onclick=()=>renderSections(book);
-  const go=(items,label)=>renderFormSelect(shuffle(items),label,()=>renderRange(book,sec));
-  $("#all").onclick=()=>go(itemsOf(book,sec,null),`${sec}（全体）`);
+  const refresh=()=>{
+    const base=countItems();
+    const n=limit>0?Math.min(limit,base.length):base.length;
+    $("#cnt").textContent=n;
+  };
   document.querySelectorAll(".set-card[data-cat]").forEach(c=>c.onclick=()=>{
-    const cat=decodeURIComponent(c.dataset.cat);go(itemsOf(book,sec,cat),`${sec} · ${cat}`);});
+    const cat=decodeURIComponent(c.dataset.cat);
+    if(selected.has(cat)){selected.delete(cat);c.classList.remove("sel");}
+    else{selected.add(cat);c.classList.add("sel");}
+    refresh();
+  });
+  document.querySelectorAll(".count-chip").forEach(ch=>ch.onclick=()=>{
+    limit=+ch.dataset.lim;
+    document.querySelectorAll(".count-chip").forEach(x=>x.classList.toggle("on",x===ch));
+    refresh();
+  });
+  $("#start").onclick=()=>{
+    let base=shuffle(countItems());
+    if(limit>0)base=base.slice(0,limit);
+    if(!base.length){toast("対象がありません");return;}
+    const label=selected.size===0?`${sec}（全体）`:`${sec} · ${[...selected].join("・")}`;
+    renderFormSelect(base,label,()=>renderRange(book,sec));
+  };
 }
 
 /* ---- form hierarchy: 四択 / 記述 → submodes ---- */
@@ -1184,6 +1324,82 @@ function renderSubMode(queue,label,backFn,form,exN,enN){
     </div>`;
   $("#bk").onclick=()=>renderFormSelect(queue,label,backFn);
   document.querySelectorAll(".row[data-m]").forEach(r=>r.onclick=()=>startQuiz(queue,label,r.dataset.m,backFn));
+}
+
+/* ---- MyList: 条件で動的に集める学習リスト ---- */
+function allCategories(){return uniq(QUESTIONS.map(d=>d.category));}
+function mylistItems(ml){
+  return QUESTIONS.filter(d=>
+    (!ml.books.length||ml.books.includes(d.book))&&
+    (!ml.cats.length||ml.cats.includes(d.category))&&
+    (!ml.types.length||ml.types.includes(d.type)));
+}
+async function saveMyLists(){await DB.put("kv","mylists",MYLISTS);}
+function renderMyLists(){
+  sessionReturn=renderMyLists;
+  screen.innerHTML=`
+    <div class="navbar"><button class="back" id="bk">← 学習</button><div class="nav-title"><b>マイリスト</b></div></div>
+    <div class="lt" style="font-size:22px">マイリスト学習</div>
+    <div class="lt-sub">教材・品詞・形式の条件で範囲を定義します。教材を追加すると、条件に合う問題が自動で増えます。</div>
+    ${MYLISTS.length?`<div class="list">
+      ${MYLISTS.map((ml,i)=>{const n=mylistItems(ml).length;
+        return `<button class="row" data-i="${i}">
+          <div class="row-main"><div class="row-title">${esc(ml.name)}</div>
+          <div class="row-sub">${n} 問 · ${[...(ml.books||[]),...(ml.cats||[]),...(ml.types.map(t=>TYPE_LABEL[t]||t))].join("・")||"全体"}</div></div>
+          <div class="row-arrow">→</div></button>`;}).join("")}</div>`
+    :`<div class="empty">まだマイリストがありません。<br>下のボタンから作成できます。</div>`}
+    <button class="btn primary" id="add" style="margin-top:16px">＋ マイリストを作成</button>`;
+  $("#bk").onclick=renderStudyRoot;
+  $("#add").onclick=()=>renderMyListForm(-1);
+  document.querySelectorAll(".row[data-i]").forEach(r=>r.onclick=()=>renderMyListDetail(+r.dataset.i));
+}
+function renderMyListDetail(i){
+  const ml=MYLISTS[i];const items=mylistItems(ml);
+  screen.innerHTML=`
+    <div class="navbar"><button class="back" id="bk">← マイリスト</button><div class="nav-title"><b>${esc(ml.name)}</b></div></div>
+    <div class="lt" style="font-size:22px">${esc(ml.name)}</div>
+    <div class="lt-sub">${items.length} 問が条件に合致しています。</div>
+    <button class="btn primary" id="study">この範囲で学習</button>
+    <button class="btn ghost" id="editL" style="margin-top:10px">条件を編集</button>
+    <button class="btn ghost" id="delL" style="margin-top:10px;color:var(--red);border-color:var(--red)">削除</button>`;
+  $("#bk").onclick=renderMyLists;
+  $("#study").onclick=()=>{
+    if(!items.length){toast("条件に合う問題がありません");return;}
+    renderFormSelect(shuffle(items),ml.name,()=>renderMyListDetail(i));
+  };
+  $("#editL").onclick=()=>renderMyListForm(i);
+  $("#delL").onclick=async()=>{if(!confirm("このマイリストを削除しますか？"))return;
+    MYLISTS.splice(i,1);await saveMyLists();toast("削除しました");renderMyLists();};
+}
+function renderMyListForm(i){
+  const isNew=i<0;
+  const ml=isNew?{name:"",books:[],cats:[],types:[]}:JSON.parse(JSON.stringify(MYLISTS[i]));
+  const books=booksList(),cats=allCategories(),types=uniq(QUESTIONS.map(d=>d.type));
+  const chipRow=(arr,sel,attr)=>arr.map(v=>`<button class="filter-chip ${sel.includes(v)?'on':''}" data-${attr}="${encodeURIComponent(v)}">${esc(attr==='type'?(TYPE_LABEL[v]||v):v)}</button>`).join("");
+  screen.innerHTML=`
+    <div class="navbar"><button class="back" id="bk">← 戻る</button><div class="nav-title"><b>${isNew?"新規マイリスト":"条件を編集"}</b></div></div>
+    <div class="field"><label>リスト名</label>
+      <input id="mlName" value="${esc(ml.name)}" placeholder="例：全教材の動詞" autocapitalize="off"></div>
+    <div class="divider"><span>教材（未選択で全教材）</span></div>
+    <div class="chips" id="bk_chips">${chipRow(books,ml.books,"book")}</div>
+    <div class="divider"><span>品詞・分類（未選択で全部）</span></div>
+    <div class="chips" id="cat_chips">${chipRow(cats,ml.cats,"cat")}</div>
+    <div class="divider"><span>形式（未選択で全部）</span></div>
+    <div class="chips" id="type_chips">${chipRow(types,ml.types,"type")}</div>
+    <div class="lt-sub" id="preview" style="margin:18px 0 0">条件に合致：${mylistItems(ml).length} 問</div>
+    <button class="btn primary" id="save" style="margin-top:14px">保存する</button>`;
+  $("#bk").onclick=()=>isNew?renderMyLists():renderMyListDetail(i);
+  const toggle=(attr,val)=>{const k=attr==="book"?"books":attr==="cat"?"cats":"types";
+    const arr=ml[k];const idx=arr.indexOf(val);if(idx>=0)arr.splice(idx,1);else arr.push(val);
+    $("#preview").textContent="条件に合致："+mylistItems(ml).length+" 問";};
+  document.querySelectorAll("[data-book]").forEach(c=>c.onclick=()=>{c.classList.toggle("on");toggle("book",decodeURIComponent(c.dataset.book));});
+  document.querySelectorAll("[data-cat]").forEach(c=>c.onclick=()=>{c.classList.toggle("on");toggle("cat",decodeURIComponent(c.dataset.cat));});
+  document.querySelectorAll("[data-type]").forEach(c=>c.onclick=()=>{c.classList.toggle("on");toggle("type",decodeURIComponent(c.dataset.type));});
+  $("#save").onclick=async()=>{
+    ml.name=$("#mlName").value.trim()||"無題のリスト";
+    if(isNew){ml.id=Date.now();MYLISTS.push(ml);}else MYLISTS[i]=ml;
+    await saveMyLists();toast("保存しました");renderMyLists();
+  };
 }
 
 /* ---- review scopes ---- */
@@ -1297,6 +1513,21 @@ function renderProgress(){
   const totalWrong=words.reduce((a,w)=>a+w.p.wrong,0);
   const studiedDays=Object.keys(DAILY).length;
 
+  // per-section mastery breakdown (全セクション・ビジュアル) — unique words per section
+  const secBreak={};
+  for(const it of QUESTIONS){
+    const key=it.book+" › "+it.section;
+    const m=(secBreak[key]=secBreak[key]||{counts:[0,0,0,0,0],keys:new Set()});
+    const k=wordKey(it);if(m.keys.has(k))continue;m.keys.add(k);
+    const st=statusOf(getProg(k));
+    if(st===0)m.counts[0]++;else if(st==="review")m.counts[1]++;else m.counts[st+1]++;
+  }
+  const secList=Object.entries(secBreak).map(([k,v])=>{
+    const tot=v.counts.reduce((a,b)=>a+b,0);
+    const masteredPct=tot?Math.round(v.counts[4]/tot*100):0;
+    return {k,counts:v.counts,tot,masteredPct};
+  }).sort((a,b)=>a.masteredPct-b.masteredPct);
+
   screen.innerHTML=`
     <div class="lt-eyebrow">Progress</div>
     <div class="lt">進捗</div>
@@ -1319,6 +1550,17 @@ function renderProgress(){
         <span class="lvl-badge ${bd.cls}">${bd.label}</span>
       </div>`;}).join("")}</div>`
     :`<div class="empty">${totalSeen?"苦手な単語はありません。順調です。":"まだ学習記録がありません。<br>学習を始めるとここに弱点が表示されます。"}</div>`}
+    <div class="divider"><span>セクション別の進捗</span></div>
+    <div class="list">
+      ${secList.map(s=>`
+        <div class="card" style="margin-bottom:10px;padding:14px 15px">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px">
+            <div style="font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(s.k)}</div>
+            <div style="font-family:'Archivo';font-size:13px;font-weight:800;color:${s.masteredPct>=80?'var(--green)':s.masteredPct>=40?'var(--gold)':'var(--sub)'};flex:none;margin-left:10px">${s.masteredPct}%</div>
+          </div>
+          <div class="mbar" style="margin:0">${s.counts.map((n,i)=>`<div style="flex:${Math.max(n,0.001)};background:${BAR_COLORS[i]}"></div>`).join("")}</div>
+        </div>`).join("")}
+    </div>
     <div class="divider"><span>苦手なセクション</span></div>
     ${weakSecs.length?`<div class="list">${weakSecs.map(s=>`
       <div class="row" style="cursor:default">
@@ -1338,6 +1580,9 @@ function renderSettings(){
     <div class="divider"><span>Goal</span></div>
     <div class="field"><label>目標日（試験日など）</label>
       <input type="date" id="goalDate" value="${esc(SETTINGS.goalDate)}"></div>
+    <button class="row" id="goalScope"><div class="row-main"><div class="row-title">目標の範囲</div>
+      <div class="row-sub">${(()=>{const sc=SETTINGS.goalScope||{books:[],cats:[]};const parts=[...(sc.books||[]),...(sc.cats||[])];return parts.length?parts.join("・"):"全単語をマスター";})()}</div></div>
+      <div class="row-arrow">→</div></button>
 
     <div class="divider"><span>Learning</span></div>
     <div class="toggle-row">
@@ -1345,6 +1590,16 @@ function renderSettings(){
       <div class="t-sub">英→日の四択で単語を自動再生</div></div>
       <button class="switch ${SETTINGS.autoPlay?'on':''}" id="apSwitch"></button>
     </div>
+    <div class="field"><label>読み上げ速度（${(SETTINGS.speechRate||0.92).toFixed(2)}）</label>
+      <input type="range" id="rate" min="0.6" max="1.2" step="0.02" value="${SETTINGS.speechRate||0.92}" style="width:100%"></div>
+    <p style="color:var(--sub);font-size:11px;line-height:1.6;margin:-4px 2px 12px">声の質は端末内蔵の音声によります。iPhoneの設定→アクセシビリティ→読み上げコンテンツ→声 で高品質な英語音声を追加すると、より自然になります。</p>
+    <div class="toggle-row">
+      <div class="t-main"><div class="t-title">制限時間モード</div>
+      <div class="t-sub">考える時間を区切ってテンポよく。時間切れは不正解にせず要復習に</div></div>
+      <button class="switch ${SETTINGS.timed?'on':''}" id="timedSwitch"></button>
+    </div>
+    ${SETTINGS.timed?`<div class="field"><label>制限時間（${SETTINGS.timeSec||8} 秒）</label>
+      <input type="range" id="timeSec" min="4" max="20" step="1" value="${SETTINGS.timeSec||8}" style="width:100%"></div>`:""}
 
     <div class="divider"><span>Data</span></div>
     <div class="list">
@@ -1358,6 +1613,15 @@ function renderSettings(){
         <div class="row-sub">単語・意味・例文をアプリ内で修正</div></div><div class="row-arrow">→</div></button>
     </div>
 
+    <div class="divider"><span>Backup</span></div>
+    <div class="list">
+      <button class="row" id="bkup"><div class="row-main"><div class="row-title">学習記録をバックアップ</div>
+        <div class="row-sub">習熟度・履歴・要復習・設定をまとめてファイルに保存</div></div><div class="row-arrow">↓</div></button>
+      <button class="row" id="restore"><div class="row-main"><div class="row-title">バックアップから復元</div>
+        <div class="row-sub">保存したファイルを読み込んで学習記録を戻す</div></div><div class="row-arrow">↑</div></button>
+    </div>
+    <p style="color:var(--sub);font-size:11px;line-height:1.6;margin:2px 2px 0">アプリ更新やデータ消去に備え、ときどき書き出しておくと安心です。ファイルは端末内に保存され、外部には送信されません。</p>
+
     <div class="divider"><span>Danger Zone</span></div>
     <div class="list">
       <button class="row" id="resetProg"><div class="row-main"><div class="row-title" style="color:var(--red)">学習記録をリセット</div>
@@ -1365,11 +1629,19 @@ function renderSettings(){
       <button class="row" id="resetData"><div class="row-main"><div class="row-title" style="color:var(--red)">問題データを初期化</div>
         <div class="row-sub">読み込んだデータを破棄して初期サンプルに戻す</div></div></button>
     </div>
-    <p style="text-align:center;color:var(--sub);font-size:10.5px;letter-spacing:1.5px;margin-top:26px;font-family:'Archivo'">VOCAB · PHASE 1</p>`;
+    <p style="text-align:center;color:var(--sub);font-size:10.5px;letter-spacing:1.5px;margin-top:26px;font-family:'Archivo'">VOCAB · PHASE 2</p>`;
 
   $("#goalDate").onchange=async e=>{SETTINGS.goalDate=e.target.value;await DB.put("kv","settings",SETTINGS);toast("目標日を保存しました");};
+  $("#goalScope").onclick=renderGoalScope;
   $("#apSwitch").onclick=async e=>{SETTINGS.autoPlay=!SETTINGS.autoPlay;await DB.put("kv","settings",SETTINGS);
     e.currentTarget.classList.toggle("on",SETTINGS.autoPlay);};
+  $("#rate").oninput=async e=>{SETTINGS.speechRate=+e.target.value;
+    e.target.previousElementSibling.textContent=`読み上げ速度（${SETTINGS.speechRate.toFixed(2)}）`;
+    await DB.put("kv","settings",SETTINGS);};
+  $("#rate").onchange=()=>speak("example",null);  // プレビュー
+  $("#timedSwitch").onclick=async e=>{SETTINGS.timed=!SETTINGS.timed;await DB.put("kv","settings",SETTINGS);renderSettings();};
+  const ts=$("#timeSec");if(ts)ts.oninput=async e=>{SETTINGS.timeSec=+e.target.value;
+    e.target.previousElementSibling.textContent=`制限時間（${SETTINGS.timeSec} 秒）`;await DB.put("kv","settings",SETTINGS);};
   $("#library").onclick=renderLibrary;
   $("#imp").onclick=()=>$("#fileInput").click();
   $("#exp").onclick=()=>{
@@ -1379,6 +1651,18 @@ function renderSettings(){
     toast("CSVを書き出しました");
   };
   $("#edit").onclick=()=>renderEditorList("");
+  $("#bkup").onclick=async()=>{
+    const backup={
+      _format:"vocab-backup",_version:1,_exportedAt:new Date().toISOString(),
+      settings:SETTINGS,daily:DAILY,
+      progress:Object.fromEntries(PROG)
+    };
+    const blob=new Blob([JSON.stringify(backup,null,2)],{type:"application/json"});
+    const a=document.createElement("a");a.href=URL.createObjectURL(blob);
+    a.download=`vocab_backup_${todayStr()}.json`;a.click();URL.revokeObjectURL(a.href);
+    toast("学習記録を書き出しました");
+  };
+  $("#restore").onclick=()=>$("#restoreInput").click();
   $("#resetProg").onclick=async()=>{
     if(!confirm("学習記録（習熟度・履歴）をすべて消去します。よろしいですか？"))return;
     await DB.clear("progress");PROG=new Map();DAILY={};await DB.put("kv","daily",DAILY);
@@ -1390,6 +1674,31 @@ function renderSettings(){
     await syncLibrary();
     toast("初期データに戻しました");renderSettings();
   };
+}
+
+/* ---- goal scope picker ---- */
+function renderGoalScope(){
+  const sc=SETTINGS.goalScope||{books:[],cats:[]};
+  const books=booksList(),cats=allCategories();
+  const chip=(arr,sel,attr)=>arr.map(v=>`<button class="filter-chip ${sel.includes(v)?'on':''}" data-${attr}="${encodeURIComponent(v)}">${esc(v)}</button>`).join("");
+  screen.innerHTML=`
+    <div class="navbar"><button class="back" id="bk">← 設定</button><div class="nav-title"><b>目標の範囲</b></div></div>
+    <div class="lt" style="font-size:22px">目標の範囲</div>
+    <div class="lt-sub">未選択なら全単語が目標。教材や品詞を選ぶと、その範囲のマスターを目標に逆算します。</div>
+    <div class="divider"><span>教材</span></div>
+    <div class="chips" id="b_chips">${chip(books,sc.books||[],"book")}</div>
+    <div class="divider"><span>品詞・分類</span></div>
+    <div class="chips" id="c_chips">${chip(cats,sc.cats||[],"cat")}</div>
+    <div class="lt-sub" id="prev" style="margin:18px 0 0">対象：${goalTotalWords()} 語</div>
+    <button class="btn primary" id="save" style="margin-top:14px">保存する</button>`;
+  $("#bk").onclick=renderSettings;
+  const tmp={books:[...(sc.books||[])],cats:[...(sc.cats||[])]};
+  const upd=()=>{const old=SETTINGS.goalScope;SETTINGS.goalScope=tmp;$("#prev").textContent="対象："+goalTotalWords()+" 語";SETTINGS.goalScope=old;};
+  document.querySelectorAll("[data-book]").forEach(c=>c.onclick=()=>{c.classList.toggle("on");
+    const v=decodeURIComponent(c.dataset.book);const i=tmp.books.indexOf(v);i>=0?tmp.books.splice(i,1):tmp.books.push(v);upd();});
+  document.querySelectorAll("[data-cat]").forEach(c=>c.onclick=()=>{c.classList.toggle("on");
+    const v=decodeURIComponent(c.dataset.cat);const i=tmp.cats.indexOf(v);i>=0?tmp.cats.splice(i,1):tmp.cats.push(v);upd();});
+  $("#save").onclick=async()=>{SETTINGS.goalScope=tmp;await DB.put("kv","settings",SETTINGS);toast("目標範囲を保存しました");renderSettings();};
 }
 
 /* ---- library (教材) management ---- */
@@ -1533,6 +1842,33 @@ $("#fileInput").addEventListener("change",e=>{
   e.target.value="";
 });
 
+/* ---------- restore learning records from backup JSON ---------- */
+$("#restoreInput").addEventListener("change",e=>{
+  const f=e.target.files[0];if(!f)return;
+  const r=new FileReader();
+  r.onload=async()=>{
+    try{
+      const data=JSON.parse(r.result);
+      if(data._format!=="vocab-backup"||!data.progress){
+        toast("このファイルは学習記録のバックアップではありません");return;}
+      if(!confirm("現在の学習記録をこのバックアップで置き換えます。よろしいですか？"))return;
+      // restore settings & daily
+      if(data.settings)SETTINGS={...SETTINGS,...data.settings};
+      DAILY=data.daily||{};
+      await DB.put("kv","settings",SETTINGS);
+      await DB.put("kv","daily",DAILY);
+      // restore progress
+      await DB.clear("progress");
+      PROG=new Map();
+      for(const [k,v] of Object.entries(data.progress)){PROG.set(k,v);await DB.put("progress",k,v);}
+      toast(`学習記録を復元しました（${PROG.size}語）`);
+      switchTab("settings");
+    }catch(err){console.error(err);toast("復元エラー：ファイルが壊れている可能性があります");}
+  };
+  r.readAsText(f,"utf-8");
+  e.target.value="";
+});
+
 /* ---------- init ---------- */
 (async function init(){
   try{
@@ -1548,7 +1884,12 @@ $("#fileInput").addEventListener("change",e=>{
     LIBRARY=lib;
     QUESTIONS=LIBRARY.flatMap(b=>b.items);
     const st=await DB.get("kv","settings");if(st)SETTINGS={...SETTINGS,...st};
+    if(!SETTINGS.goalScope||typeof SETTINGS.goalScope!=="object")SETTINGS.goalScope={books:[],cats:[]};
+    if(!SETTINGS.goalScope.books)SETTINGS.goalScope.books=[];
+    if(!SETTINGS.goalScope.cats)SETTINGS.goalScope.cats=[];
+    if(typeof SETTINGS.speechRate!=="number")SETTINGS.speechRate=0.92;
     const dl=await DB.get("kv","daily");if(dl)DAILY=dl;
+    const ml=await DB.get("kv","mylists");if(ml)MYLISTS=ml;
     PROG=new Map(await DB.entries("progress"));
   }catch(err){
     console.error("DB init failed",err);
