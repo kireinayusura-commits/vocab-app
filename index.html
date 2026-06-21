@@ -271,6 +271,30 @@
     border-radius:99px;opacity:0;pointer-events:none;transition:.25s;z-index:99;white-space:nowrap;}
   .toast.show{opacity:1;transform:translateX(-50%);}
   .empty{color:var(--sub);font-size:13px;text-align:center;padding:28px 0;line-height:1.7;}
+  /* ---- flashcard ---- */
+  .flash-card{background:var(--panel);border:1px solid var(--line);border-radius:20px;
+    min-height:300px;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:18px;padding:30px 24px;cursor:pointer;text-align:center;animation:rise .3s;position:relative;}
+  .flash-card .fc-en{font-family:'Archivo';font-weight:700;font-size:clamp(26px,8vw,40px);letter-spacing:.5px;word-break:break-word;line-height:1.2;}
+  .flash-card .fc-ja{font-size:clamp(17px,5vw,22px);font-weight:500;line-height:1.7;color:var(--gold);}
+  .flash-card .fc-ex{font-size:13.5px;color:var(--sub);line-height:1.7;margin-top:4px;}
+  .flash-card .fc-hint{position:absolute;bottom:14px;font-size:11px;color:var(--sub);letter-spacing:1px;font-family:'Archivo';}
+  .flash-card .fc-mark{position:absolute;top:14px;right:16px;font-size:11px;font-family:'Archivo';font-weight:800;letter-spacing:1px;}
+  .fc-mark.known{color:var(--green);}
+  .fc-mark.later{color:var(--gold);}
+  .flash-speak{position:absolute;top:12px;left:12px;width:38px;height:38px;border-radius:50%;
+    background:var(--panel-2);border:1px solid var(--line);color:var(--sub);display:flex;align-items:center;justify-content:center;cursor:pointer;}
+  .flash-speak svg{width:17px;height:17px;}
+  .flash-actions{display:flex;gap:11px;margin-top:16px;}
+  .flash-actions button{flex:1;border:none;cursor:pointer;font-family:'Noto Sans JP';font-weight:700;
+    font-size:15px;padding:16px;border-radius:14px;}
+  .fc-later{background:var(--panel);border:1px solid var(--gold)!important;color:var(--gold);}
+  .fc-known{background:var(--green);color:#0c2616;}
+  .flash-meta{display:flex;justify-content:space-between;font-family:'Archivo';font-size:11px;color:var(--sub);letter-spacing:1px;margin-bottom:14px;}
+  .flash-toolbar{display:flex;gap:8px;margin-bottom:16px;}
+  .flash-toggle{flex:1;text-align:center;background:var(--panel);border:1px solid var(--line);border-radius:11px;
+    padding:10px;font-size:12px;font-family:'Noto Sans JP';color:var(--sub);cursor:pointer;}
+  .flash-toggle.on{border-color:var(--gold);color:var(--gold);}
 </style>
 </head>
 <body>
@@ -495,6 +519,7 @@ const DB={
 /* ---------- global state ---------- */
 let LIBRARY=[];                   // [{name, items:[...]}] 教材ライブラリ（複数ファイル）
 let MYLISTS=[];                   // [{id,name,books:[],cats:[],types:[]}] 条件で動的に集めるリスト
+let FLASH={};                     // wordKey -> "known"|"later" 単語帳専用（習熟度とは別管理）
 let QUESTIONS=[];                 // flattened view of all enabled books
 let PROG=new Map();               // wordKey -> progress record
 let SETTINGS={goalDate:"",autoPlay:true,goalScope:{books:[],cats:[]},speechRate:0.92,timed:false,timeSec:8};
@@ -1113,7 +1138,7 @@ function renderResult(){
 let currentTab="home";
 function switchTab(tab){
   stopTimer();
-  currentTab=tab;session=null;if(synth)synth.cancel();
+  currentTab=tab;session=null;flashSession=null;if(synth)synth.cancel();
   document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active",b.dataset.tab===tab));
   ({home:renderHome,study:renderStudyRoot,progress:renderProgress,settings:renderSettings})[tab]();
   window.scrollTo(0,0);
@@ -1208,9 +1233,13 @@ function renderStudyRoot(){
       <div class="ic">Review</div><h3>復習する</h3>
       <p>${(()=>{const n=needsReviewCount();return n>0?`要復習が <b style="color:var(--gold)">${n}</b> 問あります。間違えた問題・わからなかった問題をまとめて復習できます。`:"間違えた問題・わからなかった問題をまとめて復習できます。";})()}</p>
     </div>
-    <button class="row" id="mylistCard" style="margin-bottom:14px">
+    <button class="row" id="mylistCard" style="margin-bottom:10px">
       <div class="row-main"><div class="row-title">マイリスト学習</div>
       <div class="row-sub">${MYLISTS.length?`${MYLISTS.length} 件のリスト`:"教材・品詞をまたいで自分の範囲を作成"}</div></div>
+      <div class="row-arrow">→</div></button>
+    <button class="row" id="flashCard" style="margin-bottom:14px">
+      <div class="row-main"><div class="row-title">単語帳でインプット</div>
+      <div class="row-sub">めくって意味を確認。テストの習熟度とは別に管理されます</div></div>
       <div class="row-arrow">→</div></button>
     <div class="divider"><span>Books</span></div>
     <div class="list">
@@ -1223,6 +1252,7 @@ function renderStudyRoot(){
     </div>`;
   $("#reviewCard").onclick=renderReviewScope;
   $("#mylistCard").onclick=renderMyLists;
+  $("#flashCard").onclick=renderFlashBooks;
   document.querySelectorAll(".row[data-book]").forEach(r=>r.onclick=()=>renderSections(decodeURIComponent(r.dataset.book)));
 }
 function sectionMastery(book,sec){
@@ -1440,6 +1470,160 @@ function renderMyListForm(i){
     if(isNew){ml.id=Date.now();MYLISTS.push(ml);}else MYLISTS[i]=ml;
     await saveMyLists();toast("保存しました");renderMyLists();
   };
+}
+
+/* ---- flashcard (単語帳) — テストとは独立。FLASH に覚えた/まだ を別管理 ---- */
+function flashMark(it){return FLASH[wordKey(it)]||null;}
+async function setFlashMark(it,mark){
+  const k=wordKey(it);
+  if(mark)FLASH[k]=mark;else delete FLASH[k];
+  await DB.put("kv","flash",FLASH);
+}
+function flashStats(items){
+  let known=0,later=0,untouched=0;
+  const seen=new Set();
+  for(const it of items){const k=wordKey(it);if(seen.has(k))continue;seen.add(k);
+    const m=FLASH[k];if(m==="known")known++;else if(m==="later")later++;else untouched++;}
+  return {known,later,untouched,total:seen.size};
+}
+function renderFlashBooks(){
+  sessionReturn=renderFlashBooks;
+  screen.innerHTML=`
+    <div class="navbar"><button class="back" id="bk">← 学習</button><div class="nav-title"><b>単語帳</b></div></div>
+    <div class="lt" style="font-size:22px">単語帳でインプット</div>
+    <div class="lt-sub">教材を選んでください。めくって意味を確認する形式です。テストの習熟度・要復習とは別に管理されます。</div>
+    <div class="list">
+      ${booksList().map(b=>{
+        const st=flashStats(itemsOf(b,null,null));
+        return `<button class="row" data-book="${encodeURIComponent(b)}">
+          <div class="row-main"><div class="row-title">${esc(b)}</div>
+          <div class="row-sub">${st.total} 問 · 覚えた ${st.known} · まだ ${st.later}</div></div>
+          <div class="row-arrow">→</div></button>`;}).join("")}
+    </div>`;
+  $("#bk").onclick=renderStudyRoot;
+  document.querySelectorAll(".row[data-book]").forEach(r=>r.onclick=()=>renderFlashSections(decodeURIComponent(r.dataset.book)));
+}
+function renderFlashSections(book){
+  screen.innerHTML=`
+    <div class="navbar"><button class="back" id="bk">← 教材</button><div class="nav-title"><b>${esc(book)}</b></div></div>
+    <div class="lt" style="font-size:22px">セクションを選ぶ</div>
+    <div class="lt-sub">単語帳で確認する範囲を選びます。</div>
+    <button class="row accent" id="all">
+      <div class="row-main"><div class="row-title">この教材ぜんぶ</div>
+      <div class="row-sub">${itemsOf(book,null,null).length} 問をめくる</div></div><div class="row-arrow">→</div></button>
+    <div class="divider"><span>Sections</span></div>
+    <div class="list">
+      ${sectionsOf(book).map(sec=>{
+        const st=flashStats(itemsOf(book,sec,null));
+        return `<button class="row" data-sec="${encodeURIComponent(sec)}">
+          <div class="row-main"><div class="row-title">${esc(sec)}</div>
+          <div class="row-sub">${st.total} 問 · 覚えた ${st.known} · まだ ${st.later}</div></div>
+          <div class="row-arrow">→</div></button>`;}).join("")}
+    </div>`;
+  $("#bk").onclick=renderFlashBooks;
+  $("#all").onclick=()=>renderFlashStart(itemsOf(book,null,null),book,()=>renderFlashSections(book));
+  document.querySelectorAll(".row[data-sec]").forEach(r=>r.onclick=()=>{
+    const sec=decodeURIComponent(r.dataset.sec);
+    renderFlashStart(itemsOf(book,sec,null),sec,()=>renderFlashSections(book));});
+}
+function renderFlashStart(items,label,backFn){
+  const st=flashStats(items);
+  screen.innerHTML=`
+    <div class="navbar"><button class="back" id="bk">← 戻る</button><div class="nav-title"><b>${esc(label)}</b></div></div>
+    <div class="lt" style="font-size:22px">単語帳の設定</div>
+    <div class="lt-sub">めくる範囲とカードの並びを選びます。</div>
+    <div class="stat-row">
+      <div class="s"><div class="n">${st.total}</div><div class="l">総数</div></div>
+      <div class="s"><div class="n" style="color:var(--green)">${st.known}</div><div class="l">覚えた</div></div>
+      <div class="s"><div class="n" style="color:var(--gold)">${st.later}</div><div class="l">まだ</div></div>
+    </div>
+    <div class="divider"><span>めくる対象</span></div>
+    <div class="list">
+      <button class="row accent" id="goAll"><div class="row-main"><div class="row-title">すべてめくる</div>
+        <div class="row-sub">${st.total} 問</div></div><div class="row-arrow">→</div></button>
+      <button class="row ${st.later?'':'disabled'}" id="goLater"><div class="row-main"><div class="row-title">「まだ」だけ復習</div>
+        <div class="row-sub">前回「まだ」にした ${st.later} 問</div></div><div class="row-arrow">→</div></button>
+      <button class="row ${st.untouched?'':'disabled'}" id="goNew"><div class="row-main"><div class="row-title">未確認だけ</div>
+        <div class="row-sub">まだ開いていない ${st.untouched} 問</div></div><div class="row-arrow">→</div></button>
+    </div>
+    <div class="divider"><span>表示の向き</span></div>
+    <div class="flash-toolbar">
+      <button class="flash-toggle on" id="dirEnJa">英 → 日（意味を隠す）</button>
+      <button class="flash-toggle" id="dirJaEn">日 → 英（英語を隠す）</button>
+    </div>`;
+  $("#bk").onclick=backFn;
+  let dir="en2ja";
+  $("#dirEnJa").onclick=()=>{dir="en2ja";$("#dirEnJa").classList.add("on");$("#dirJaEn").classList.remove("on");};
+  $("#dirJaEn").onclick=()=>{dir="ja2en";$("#dirJaEn").classList.add("on");$("#dirEnJa").classList.remove("on");};
+  const start=(pool)=>{
+    if(!pool.length){toast("対象がありません");return;}
+    startFlash(shuffle(pool),label,dir,backFn);
+  };
+  $("#goAll").onclick=()=>start(items.slice());
+  $("#goLater").onclick=()=>start(items.filter(it=>flashMark(it)==="later"));
+  $("#goNew").onclick=()=>start(items.filter(it=>!flashMark(it)));
+}
+let flashSession=null;
+function startFlash(cards,label,dir,backFn){
+  flashSession={cards,label,dir,backFn,idx:0,revealed:false};
+  renderFlashCard();
+}
+function renderFlashCard(){
+  const fs=flashSession,it=fs.cards[fs.idx];
+  const front=fs.dir==="en2ja"?esc(it.question):esc(it.answer);
+  const back=fs.dir==="en2ja"?esc(it.answer):esc(it.question);
+  const mark=flashMark(it);
+  const exHTML=(it.example&&fs.revealed)?`<div class="fc-ex">${esc(it.example.replace(/_{2,}/,clozeAnswer(it)))}${it.exampleJa?"<br>"+esc(it.exampleJa):""}</div>`:"";
+  screen.innerHTML=`
+    <div class="navbar"><button class="back" id="bk">終了</button>
+      <div class="nav-title"><b>${esc(fs.label)}</b> · 単語帳</div></div>
+    <div class="flash-meta"><span>${String(fs.idx+1).padStart(2,'0')} / ${String(fs.cards.length).padStart(2,'0')}</span>
+      <span>覚えた ${flashStats(fs.cards).known} / ${fs.cards.length}</span></div>
+    <div class="track"><div style="width:${fs.idx/fs.cards.length*100}%"></div></div>
+    <div style="height:14px"></div>
+    <div class="flash-card" id="card">
+      <button class="flash-speak" id="fspeak" aria-label="発音"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a9 9 0 0 1 0 14"/></svg></button>
+      ${mark?`<div class="fc-mark ${mark}">${mark==="known"?"覚えた":"まだ"}</div>`:""}
+      <div class="fc-en">${front}</div>
+      ${fs.revealed?`<div class="fc-ja">${back}</div>${exHTML}`:`<div class="fc-hint">タップで意味を表示</div>`}
+    </div>
+    <div class="flash-actions">
+      <button class="fc-later" id="later">まだ</button>
+      <button class="fc-known" id="known">覚えた</button>
+    </div>`;
+  window.scrollTo(0,0);
+  $("#bk").onclick=()=>{flashSession=null;(fs.backFn||renderFlashBooks)();};
+  $("#fspeak").onclick=e=>{e.stopPropagation();speak(it.question,$("#fspeak"));};
+  $("#card").onclick=()=>{fs.revealed=!fs.revealed;renderFlashCard();};
+  const next=async(mark)=>{
+    await setFlashMark(it,mark);
+    if(fs.idx+1>=fs.cards.length){renderFlashDone();}
+    else{fs.idx++;fs.revealed=false;renderFlashCard();}
+  };
+  $("#later").onclick=()=>next("later");
+  $("#known").onclick=()=>next("known");
+  // 英→日で表向きが英語のときは自動発音はしない（インプットなので任意）
+}
+function renderFlashDone(){
+  const fs=flashSession;
+  const st=flashStats(fs.cards);
+  screen.innerHTML=`
+    <div class="result">
+      <div class="lt-eyebrow">単語帳 · ${esc(fs.label)}</div>
+      <div style="font-size:46px;margin:20px 0 6px">📖</div>
+      <div class="res-msg" style="color:var(--gold)">完了</div>
+      <div class="res-sub">${fs.cards.length} 枚をめくりました。</div>
+      <div class="stat-row">
+        <div class="s"><div class="n">${fs.cards.length}</div><div class="l">めくった</div></div>
+        <div class="s"><div class="n" style="color:var(--green)">${st.known}</div><div class="l">覚えた</div></div>
+        <div class="s"><div class="n" style="color:var(--gold)">${st.later}</div><div class="l">まだ</div></div>
+      </div>
+      ${st.later>0?`<button class="btn primary" id="again">「まだ」の ${st.later} 問をもう一度</button>`:""}
+      <button class="btn ghost" id="back" style="margin-top:10px">単語帳メニューに戻る</button>
+    </div>`;
+  const ag=$("#again");
+  if(ag)ag.onclick=()=>startFlash(shuffle(fs.cards.filter(it=>flashMark(it)==="later")),fs.label,fs.dir,fs.backFn);
+  $("#back").onclick=()=>{const b=fs.backFn;flashSession=null;(b||renderFlashBooks)();};
 }
 
 /* ---- review scopes ---- */
@@ -1694,7 +1878,7 @@ function renderSettings(){
   $("#bkup").onclick=async()=>{
     const backup={
       _format:"vocab-backup",_version:1,_exportedAt:new Date().toISOString(),
-      settings:SETTINGS,daily:DAILY,
+      settings:SETTINGS,daily:DAILY,mylists:MYLISTS,flash:FLASH,
       progress:Object.fromEntries(PROG)
     };
     const blob=new Blob([JSON.stringify(backup,null,2)],{type:"application/json"});
@@ -1895,8 +2079,12 @@ $("#restoreInput").addEventListener("change",e=>{
       // restore settings & daily
       if(data.settings)SETTINGS={...SETTINGS,...data.settings};
       DAILY=data.daily||{};
+      if(data.mylists)MYLISTS=data.mylists;
+      if(data.flash)FLASH=data.flash;
       await DB.put("kv","settings",SETTINGS);
       await DB.put("kv","daily",DAILY);
+      await DB.put("kv","mylists",MYLISTS);
+      await DB.put("kv","flash",FLASH);
       // restore progress
       await DB.clear("progress");
       PROG=new Map();
@@ -1930,6 +2118,7 @@ $("#restoreInput").addEventListener("change",e=>{
     if(typeof SETTINGS.speechRate!=="number")SETTINGS.speechRate=0.92;
     const dl=await DB.get("kv","daily");if(dl)DAILY=dl;
     const ml=await DB.get("kv","mylists");if(ml)MYLISTS=ml;
+    const fl=await DB.get("kv","flash");if(fl)FLASH=fl;
     PROG=new Map(await DB.entries("progress"));
   }catch(err){
     console.error("DB init failed",err);
