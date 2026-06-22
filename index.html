@@ -1011,7 +1011,7 @@ async function chooseMC(btn,item,correct,mode,selfUnknown){
   if(ok)await recordCorrect(item,false,selfUnknown);else await recordWrong(item);
   let msg=ok?"CORRECT":"正解 → "+correct;
   if(ok&&selfUnknown)msg="正解（要復習に追加）";  // わからない申告→正解でも復習対象
-  finishAnswer(ok,item,msg,false);
+  finishAnswer(ok,item,msg,false,selfUnknown);  // selfUnknown正解は再チャレンジ対象
 }
 async function checkTyped(inp,item,mode){
   const s=session;if(s.answered)return;s.answered=true;
@@ -1077,7 +1077,7 @@ function setupOrder(item){
     finishAnswer(ok,item,ok?"CORRECT":"正解 → "+item.answer,false);
   };
 }
-function finishAnswer(ok,item,msg,helpUsed){
+function finishAnswer(ok,item,msg,helpUsed,forceReview){
   const s=session;
   const fb=$("#fb");
   let extra=item.note?`<span class="note">${esc(item.note)}</span>`:"";
@@ -1085,6 +1085,8 @@ function finishAnswer(ok,item,msg,helpUsed){
   fb.innerHTML=esc(msg)+extra;
   fb.className="fb show "+(ok?"ok":"no");
   if(ok)s.score++;else s.wrong.push(item);
+  // 「わからない」申告やヒント正解は、正解でもセッションの再チャレンジ対象に含める
+  if(ok&&forceReview&&!s.wrong.includes(item))s.wrong.push(item);
   const n=$("#next");n.classList.add("show");
   n.textContent=(s.idx+1>=s.total)?"結果を見る →":"NEXT →";
 }
@@ -1097,7 +1099,8 @@ function advance(){
 function renderResult(){
   const s=session;
   const pct=Math.round(s.score/s.total*100);
-  const wrongN=s.total-s.score;
+  const wrongN=s.total-s.score;          // 採点上の不正解（スコア表示用）
+  const retryN=s.wrong.length;           // 再チャレンジ対象（不正解＋わからない申告）
   const C=2*Math.PI*64,off=C*(1-pct/100);
   const col=pct>=80?"var(--green)":pct>=50?"var(--gold)":"var(--red)";
   let msg,sub;
@@ -1105,6 +1108,9 @@ function renderResult(){
   else if(pct>=80){msg="EXCELLENT";sub="高い理解度です。この調子で。";}
   else if(pct>=50){msg="GOOD";sub="あと一歩。間違えた問題を復習しましょう。";}
   else{msg="KEEP GOING";sub="繰り返しが定着への近道です。";}
+  const retryNote=retryN>wrongN
+    ? `◆ 間違い＋「わからない」の ${retryN} 問を再チャレンジできます`
+    : `◆ 間違えた ${retryN} 問だけ再チャレンジできます`;
   screen.innerHTML=`
     <div class="result">
       <div class="lt-eyebrow">Result · ${esc(s.label)}</div>
@@ -1123,12 +1129,12 @@ function renderResult(){
         <div class="s"><div class="n" style="color:var(--green)">${s.score}</div><div class="l">Correct</div></div>
         <div class="s"><div class="n" style="color:var(--red)">${wrongN}</div><div class="l">Wrong</div></div>
       </div>
-      ${wrongN>0?`<div class="retry-note">◆ 間違えた ${wrongN} 問だけ再チャレンジできます</div>
-        <button class="btn danger" id="retry">間違いだけ再チャレンジ</button>`:""}
+      ${retryN>0?`<div class="retry-note">${retryNote}</div>
+        <button class="btn danger" id="retry">${retryN}問を再チャレンジ</button>`:""}
       <button class="btn primary" id="menu" style="margin-top:10px">メニューに戻る</button>
     </div>`;
   requestAnimationFrame(()=>{const a=$("#arc");a.style.transition="stroke-dashoffset 1s cubic-bezier(.2,.8,.3,1)";a.style.strokeDashoffset=off;});
-  if(wrongN>0)$("#retry").onclick=()=>startQuiz(shuffle(s.wrong),s.label+" · 復習",s.chosenMode);
+  if(retryN>0)$("#retry").onclick=()=>startQuiz(shuffle(s.wrong),s.label+" · 復習",s.chosenMode);
   $("#menu").onclick=quitQuiz;
 }
 
@@ -1288,15 +1294,22 @@ function renderSections(book){
   $("#bk").onclick=renderStudyRoot;
   document.querySelectorAll(".row[data-sec]").forEach(r=>r.onclick=()=>renderRange(book,decodeURIComponent(r.dataset.sec)));
 }
+function statusKeyOf(it){
+  const s=statusOf(getProg(wordKey(it)));
+  return s===0?"new":s==="review"?"review":("l"+s);  // new,review,l1,l2,l3
+}
 function renderRange(book,sec){
   const cats=categoriesOf(book,sec);
   const total=itemsOf(book,sec,null).length;
   let selected=new Set();          // 選択中の品詞（空＝全体）
+  let statusFilter="all";          // all/new/review/l1/l2/l3
   let limit=0;                     // 0=全部
   const countItems=()=>{
-    const base=selected.size===0?itemsOf(book,sec,null):itemsOf(book,sec,null).filter(d=>selected.has(d.category));
+    let base=selected.size===0?itemsOf(book,sec,null):itemsOf(book,sec,null).filter(d=>selected.has(d.category));
+    if(statusFilter!=="all")base=base.filter(d=>statusKeyOf(d)===statusFilter);
     return base;
   };
+  const statusOpts=[["all","すべて"],["new","未学習"],["l1","学習中"],["review","つまずき"],["l2","定着中"],["l3","マスター"]];
   screen.innerHTML=`
     <div class="navbar"><button class="back" id="bk">← セクション</button><div class="nav-title"><b>${esc(sec)}</b></div></div>
     <div class="lt" style="font-size:22px">出題範囲を選ぶ</div>
@@ -1308,6 +1321,10 @@ function renderRange(book,sec){
           <div class="chk">✓</div>
           <h4>${esc(cat)}</h4><div class="cnt">${n} 問</div>
           <div class="cat">${TYPE_LABEL[itemsOf(book,sec,cat)[0].type]||""}</div></div>`;}).join("")}
+    </div>
+    <div class="divider"><span>習熟度でしぼる</span></div>
+    <div class="chips" id="statusChips">
+      ${statusOpts.map(([k,lbl])=>`<button class="filter-chip ${k==='all'?'on':''}" data-st="${k}">${lbl}</button>`).join("")}
     </div>
     <div class="divider"><span>出題数</span></div>
     <div class="count-chips" id="countChips">
@@ -1328,6 +1345,11 @@ function renderRange(book,sec){
     else{selected.add(cat);c.classList.add("sel");}
     refresh();
   });
+  document.querySelectorAll("[data-st]").forEach(ch=>ch.onclick=()=>{
+    statusFilter=ch.dataset.st;
+    document.querySelectorAll("[data-st]").forEach(x=>x.classList.toggle("on",x===ch));
+    refresh();
+  });
   document.querySelectorAll(".count-chip").forEach(ch=>ch.onclick=()=>{
     limit=+ch.dataset.lim;
     document.querySelectorAll(".count-chip").forEach(x=>x.classList.toggle("on",x===ch));
@@ -1337,7 +1359,8 @@ function renderRange(book,sec){
     let base=shuffle(countItems());
     if(limit>0)base=base.slice(0,limit);
     if(!base.length){toast("対象がありません");return;}
-    const label=selected.size===0?`${sec}（全体）`:`${sec} · ${[...selected].join("・")}`;
+    const stLabel=statusFilter==="all"?"":" · "+(statusOpts.find(o=>o[0]===statusFilter)[1]);
+    const label=(selected.size===0?`${sec}（全体）`:`${sec} · ${[...selected].join("・")}`)+stLabel;
     renderFormSelect(base,label,()=>renderRange(book,sec));
   };
 }
@@ -1385,11 +1408,13 @@ function renderSubMode(queue,label,backFn,form,exN,enN){
 function allCategories(){return uniq(QUESTIONS.map(d=>d.category));}
 function mylistItems(ml){
   const secs=ml.sections||[];
+  const stats=ml.statuses||[];
   return QUESTIONS.filter(d=>
     (!ml.books.length||ml.books.includes(d.book))&&
     (!secs.length||secs.includes(d.book+"\u241f"+d.section))&&
     (!ml.cats.length||ml.cats.includes(d.category))&&
-    (!ml.types.length||ml.types.includes(d.type)));
+    (!ml.types.length||ml.types.includes(d.type))&&
+    (!stats.length||stats.includes(statusKeyOf(d))));
 }
 async function saveMyLists(){await DB.put("kv","mylists",MYLISTS);}
 function renderMyLists(){
@@ -1401,7 +1426,9 @@ function renderMyLists(){
     ${MYLISTS.length?`<div class="list">
       ${MYLISTS.map((ml,i)=>{const n=mylistItems(ml).length;
         const secLabel=(ml.sections&&ml.sections.length)?[`${ml.sections.length}セクション`]:[];
-        const parts=[...(ml.books||[]),...secLabel,...(ml.cats||[]),...((ml.types||[]).map(t=>TYPE_LABEL[t]||t))];
+        const stMap={new:"未学習",l1:"学習中",review:"つまずき",l2:"定着中",l3:"マスター"};
+        const stLabel=(ml.statuses||[]).map(s=>stMap[s]||s);
+        const parts=[...(ml.books||[]),...secLabel,...stLabel,...(ml.cats||[]),...((ml.types||[]).map(t=>TYPE_LABEL[t]||t))];
         return `<button class="row" data-i="${i}">
           <div class="row-main"><div class="row-title">${esc(ml.name)}</div>
           <div class="row-sub">${n} 問 · ${parts.join("・")||"全体"}</div></div>
@@ -1432,10 +1459,12 @@ function renderMyListDetail(i){
 }
 function renderMyListForm(i){
   const isNew=i<0;
-  const ml=isNew?{name:"",books:[],sections:[],cats:[],types:[]}:JSON.parse(JSON.stringify(MYLISTS[i]));
+  const ml=isNew?{name:"",books:[],sections:[],cats:[],types:[],statuses:[]}:JSON.parse(JSON.stringify(MYLISTS[i]));
   if(!ml.sections)ml.sections=[];
+  if(!ml.statuses)ml.statuses=[];
   const books=booksList(),cats=allCategories(),types=uniq(QUESTIONS.map(d=>d.type));
   const SEP="\u241f";
+  const statusOpts=[["new","未学習"],["l1","学習中"],["review","つまずき"],["l2","定着中"],["l3","マスター"]];
   const chipRow=(arr,sel,attr)=>arr.map(v=>`<button class="filter-chip ${sel.includes(v)?'on':''}" data-${attr}="${encodeURIComponent(v)}">${esc(attr==='type'?(TYPE_LABEL[v]||v):v)}</button>`).join("");
   // sections grouped by book; value is qualified "book␟section"
   const secChips=()=>books.map(b=>{
@@ -1447,22 +1476,26 @@ function renderMyListForm(i){
   screen.innerHTML=`
     <div class="navbar"><button class="back" id="bk">← 戻る</button><div class="nav-title"><b>${isNew?"新規マイリスト":"条件を編集"}</b></div></div>
     <div class="field"><label>リスト名</label>
-      <input id="mlName" value="${esc(ml.name)}" placeholder="例：1〜2章の副詞" autocapitalize="off"></div>
+      <input id="mlName" value="${esc(ml.name)}" placeholder="例：1〜2章の未学習" autocapitalize="off"></div>
     <div class="divider"><span>教材（未選択で全教材）</span></div>
     <div class="chips" id="bk_chips">${chipRow(books,ml.books,"book")}</div>
     <div class="divider"><span>セクション（未選択で全セクション）</span></div>
     <div id="sec_chips">${secChips()}</div>
+    <div class="divider"><span>習熟度（未選択で全部）</span></div>
+    <div class="chips" id="status_chips">${statusOpts.map(([k,lbl])=>`<button class="filter-chip ${ml.statuses.includes(k)?'on':''}" data-st="${k}">${lbl}</button>`).join("")}</div>
     <div class="divider"><span>品詞・分類（未選択で全部）</span></div>
     <div class="chips" id="cat_chips">${chipRow(cats,ml.cats,"cat")}</div>
     <div class="divider"><span>形式（未選択で全部）</span></div>
     <div class="chips" id="type_chips">${chipRow(types,ml.types,"type")}</div>
     <div class="lt-sub" id="preview" style="margin:18px 0 0">条件に合致：${mylistItems(ml).length} 問</div>
+    <p style="color:var(--sub);font-size:11px;line-height:1.6;margin:6px 2px 0">習熟度を条件にすると、学習が進むにつれて中身が変わります（例：「未学習」のリストは覚えるほど減ります）。</p>
     <button class="btn primary" id="save" style="margin-top:14px">保存する</button>`;
   $("#bk").onclick=()=>isNew?renderMyLists():renderMyListDetail(i);
   const refresh=()=>{$("#preview").textContent="条件に合致："+mylistItems(ml).length+" 問";};
   const toggle=(k,val)=>{const arr=ml[k];const idx=arr.indexOf(val);if(idx>=0)arr.splice(idx,1);else arr.push(val);refresh();};
   document.querySelectorAll("[data-book]").forEach(c=>c.onclick=()=>{c.classList.toggle("on");toggle("books",decodeURIComponent(c.dataset.book));});
   document.querySelectorAll("[data-sec]").forEach(c=>c.onclick=()=>{c.classList.toggle("on");toggle("sections",decodeURIComponent(c.dataset.sec));});
+  document.querySelectorAll("[data-st]").forEach(c=>c.onclick=()=>{c.classList.toggle("on");toggle("statuses",c.dataset.st);});
   document.querySelectorAll("[data-cat]").forEach(c=>c.onclick=()=>{c.classList.toggle("on");toggle("cats",decodeURIComponent(c.dataset.cat));});
   document.querySelectorAll("[data-type]").forEach(c=>c.onclick=()=>{c.classList.toggle("on");toggle("types",decodeURIComponent(c.dataset.type));});
   $("#save").onclick=async()=>{
