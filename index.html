@@ -1488,10 +1488,16 @@ function flashStats(items){
 }
 function renderFlashBooks(){
   sessionReturn=renderFlashBooks;
+  const reviewItems=needsReviewItems(QUESTIONS);
   screen.innerHTML=`
     <div class="navbar"><button class="back" id="bk">← 学習</button><div class="nav-title"><b>単語帳</b></div></div>
     <div class="lt" style="font-size:22px">単語帳でインプット</div>
-    <div class="lt-sub">教材を選んでください。めくって意味を確認する形式です。テストの習熟度・要復習とは別に管理されます。</div>
+    <div class="lt-sub">教材を選んでめくります。テストの習熟度・要復習とは別に管理されます。</div>
+    <button class="row accent" id="reviewFlash" style="margin-bottom:14px">
+      <div class="row-main"><div class="row-title">要復習の単語をめくる</div>
+      <div class="row-sub">${reviewItems.length>0?`テストで間違えた・わからなかった ${reviewItems.length} 問を確認`:"要復習の単語はありません"}</div></div>
+      <div class="row-arrow">→</div></button>
+    <div class="divider"><span>教材から選ぶ</span></div>
     <div class="list">
       ${booksList().map(b=>{
         const st=flashStats(itemsOf(b,null,null));
@@ -1501,6 +1507,11 @@ function renderFlashBooks(){
           <div class="row-arrow">→</div></button>`;}).join("")}
     </div>`;
   $("#bk").onclick=renderStudyRoot;
+  $("#reviewFlash").onclick=()=>{
+    const r=needsReviewItems(QUESTIONS);
+    if(!r.length){toast("要復習の単語はありません");return;}
+    renderFlashStart(r,"要復習",renderFlashBooks);
+  };
   document.querySelectorAll(".row[data-book]").forEach(r=>r.onclick=()=>renderFlashSections(decodeURIComponent(r.dataset.book)));
 }
 function renderFlashSections(book){
