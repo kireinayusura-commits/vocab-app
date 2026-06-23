@@ -517,20 +517,31 @@ const DB={
 };
 
 /* ---------- global state ---------- */
+const MYBOOK="マイ単語帳";          // マイ単語帳の特別な教材名（通常の教材一覧には出さない）
 let LIBRARY=[];                   // [{name, items:[...]}] 教材ライブラリ（複数ファイル）
+let MYWORDS=[];                   // 自分で登録した単語（教材とは別の特別な場所）
 let MYLISTS=[];                   // [{id,name,books:[],cats:[],types:[]}] 条件で動的に集めるリスト
 let FLASH={};                     // wordKey -> "known"|"later" 単語帳専用（習熟度とは別管理）
-let QUESTIONS=[];                 // flattened view of all enabled books
+let QUESTIONS=[];                 // flattened view: 全教材 + マイ単語帳（学習・検索の対象）
 let PROG=new Map();               // wordKey -> progress record
 let SETTINGS={goalDate:"",autoPlay:true,goalScope:{books:[],cats:[]},speechRate:0.92,timed:false,timeSec:8};
 let DAILY={};                     // "YYYY-MM-DD" -> {c,w,tumbles,overcome}
 const $=s=>document.querySelector(s);
 const screen=$("#screen");
 
-// rebuild QUESTIONS from LIBRARY and persist
+// rebuild QUESTIONS from LIBRARY + MYWORDS and persist library
 async function syncLibrary(){
-  QUESTIONS=LIBRARY.flatMap(b=>b.items);
+  rebuildQuestions();
   await DB.put("kv","library",LIBRARY);
+}
+function rebuildQuestions(){
+  // マイ単語帳の各単語に教材名・セクションを補完（学習の仕組みに合流させる）
+  MYWORDS.forEach(w=>{w.book=MYBOOK;if(!w.section)w.section="登録した単語";if(!w.type)w.type="word";if(!w.category)w.category="マイ単語";});
+  QUESTIONS=[...LIBRARY.flatMap(b=>b.items),...MYWORDS];
+}
+async function saveMyWords(){
+  rebuildQuestions();
+  await DB.put("kv","mywords",MYWORDS);
 }
 // merge an imported file into the library by name (replace if same name)
 async function addBookToLibrary(name,items){
@@ -1223,7 +1234,7 @@ function startTumbleReview(){
 }
 
 /* ---------- STUDY (hierarchical) ---------- */
-function booksList(){return uniq(QUESTIONS.map(d=>d.book));}
+function booksList(){return uniq(QUESTIONS.map(d=>d.book)).filter(b=>b!==MYBOOK);}
 function sectionsOf(b){return uniq(QUESTIONS.filter(d=>d.book===b).map(d=>d.section));}
 function categoriesOf(b,s){return uniq(QUESTIONS.filter(d=>d.book===b&&d.section===s).map(d=>d.category));}
 function itemsOf(b,s,c){return QUESTIONS.filter(d=>(b==null||d.book===b)&&(s==null||d.section===s)&&(c==null||d.category===c));}
@@ -1239,6 +1250,10 @@ function renderStudyRoot(){
       <div class="ic">Review</div><h3>復習する</h3>
       <p>${(()=>{const n=needsReviewCount();return n>0?`要復習が <b style="color:var(--gold)">${n}</b> 問あります。間違えた問題・わからなかった問題をまとめて復習できます。`:"間違えた問題・わからなかった問題をまとめて復習できます。";})()}</p>
     </div>
+    <button class="row accent" id="myvocabCard" style="margin-bottom:10px">
+      <div class="row-main"><div class="row-title">マイ単語帳</div>
+      <div class="row-sub">${MYWORDS.length?`登録 ${MYWORDS.length} 語 · 検索・登録・復習`:"知らない単語を登録して自分の辞書を育てる"}</div></div>
+      <div class="row-arrow">→</div></button>
     <button class="row" id="mylistCard" style="margin-bottom:10px">
       <div class="row-main"><div class="row-title">マイリスト学習</div>
       <div class="row-sub">${MYLISTS.length?`${MYLISTS.length} 件のリスト`:"教材・品詞をまたいで自分の範囲を作成"}</div></div>
@@ -1257,6 +1272,7 @@ function renderStudyRoot(){
           <div class="row-arrow">→</div></button>`;}).join("")}
     </div>`;
   $("#reviewCard").onclick=renderReviewScope;
+  $("#myvocabCard").onclick=renderMyVocab;
   $("#mylistCard").onclick=renderMyLists;
   $("#flashCard").onclick=renderFlashBooks;
   document.querySelectorAll(".row[data-book]").forEach(r=>r.onclick=()=>renderSections(decodeURIComponent(r.dataset.book)));
@@ -1502,6 +1518,88 @@ function renderMyListForm(i){
     ml.name=$("#mlName").value.trim()||"無題のリスト";
     if(isNew){ml.id=Date.now();MYLISTS.push(ml);}else MYLISTS[i]=ml;
     await saveMyLists();toast("保存しました");renderMyLists();
+  };
+}
+
+/* ---- My Vocabulary（マイ単語帳）— 自分で育てる辞書。学習・検索に合流 ---- */
+function statusBadgeShort(it){const b=statusBadge(getProg(wordKey(it)));return `<span class="lvl-badge ${b.cls}">${b.label}</span>`;}
+function renderMyVocab(query){
+  sessionReturn=()=>renderMyVocab(query);
+  const q=(query||"").trim().toLowerCase();
+  const list=q?MYWORDS.filter(w=>w.question.toLowerCase().includes(q)||(w.answer||"").toLowerCase().includes(q)):MYWORDS;
+  // 全教材横断のヒット（マイ単語帳以外）
+  const inMy=new Set(MYWORDS.map(wordKey));
+  const otherHits=q?QUESTIONS.filter(d=>d.book!==MYBOOK&&!inMy.has(wordKey(d))&&(d.question.toLowerCase().includes(q)||(d.answer||"").toLowerCase().includes(q))).slice(0,30):[];
+  screen.innerHTML=`
+    <div class="navbar"><button class="back" id="bk">← 学習</button><div class="nav-title"><b>マイ単語帳</b></div></div>
+    <div class="lt" style="font-size:22px">マイ単語帳</div>
+    <div class="lt-sub">登録 ${MYWORDS.length} 語。知らない単語を登録して、自分の辞書を育てましょう。</div>
+    <input class="search" id="mvSearch" placeholder="単語・意味で検索（全教材を横断）" value="${esc(query||"")}">
+    <div class="grid2" style="margin-bottom:6px">
+      <button class="btn primary" id="mvAdd" style="margin:0">＋ 単語を登録</button>
+      <button class="btn ghost" id="mvStudy" style="margin:0">この単語帳で学習</button>
+    </div>
+    ${MYWORDS.length?`<button class="btn ghost" id="mvFlash" style="margin-top:10px">単語帳めくりで復習</button>`:""}
+    <div class="divider"><span>${q?`検索結果（マイ単語帳 ${list.length}）`:`登録した単語 ${MYWORDS.length}`}</span></div>
+    ${list.length?`<div class="list">${list.map((w,i)=>{
+      const realIdx=MYWORDS.indexOf(w);
+      return `<button class="row" data-i="${realIdx}">
+        <div class="row-main"><div class="row-title">${esc(w.question)}</div>
+        <div class="row-sub">${esc(w.answer)}${w.note?" · "+esc(w.note):""}</div></div>
+        ${statusBadgeShort(w)}</button>`;}).join("")}</div>`
+    :`<div class="empty">${q?"マイ単語帳には見つかりませんでした。":"まだ登録がありません。「＋ 単語を登録」から追加できます。"}</div>`}
+    ${q&&otherHits.length?`<div class="divider"><span>教材内のヒット ${otherHits.length}</span></div>
+      <div class="list">${otherHits.map(d=>`
+        <div class="row" style="cursor:default">
+          <div class="row-main"><div class="row-title">${esc(d.question)}</div>
+          <div class="row-sub">${esc(d.answer)} · ${esc(d.book)}</div></div>
+          ${statusBadgeShort(d)}</div>`).join("")}</div>`:""}
+    ${q&&!list.length?`<button class="btn primary" id="mvAddThis" style="margin-top:14px">「${esc(query)}」をマイ単語帳に登録</button>`:""}`;
+  $("#bk").onclick=renderStudyRoot;
+  const sf=$("#mvSearch");
+  let t;sf.oninput=()=>{clearTimeout(t);t=setTimeout(()=>renderMyVocab(sf.value),180);};
+  $("#mvAdd").onclick=()=>renderMyWordForm(-1,query);
+  const at=$("#mvAddThis");if(at)at.onclick=()=>renderMyWordForm(-1,query,query);
+  $("#mvStudy").onclick=()=>{
+    if(!MYWORDS.length){toast("先に単語を登録してください");return;}
+    renderFormSelect(shuffle(MYWORDS.slice()),"マイ単語帳",()=>renderMyVocab(query));
+  };
+  const mf=$("#mvFlash");if(mf)mf.onclick=()=>renderFlashStart(MYWORDS.slice(),"マイ単語帳",()=>renderMyVocab(query));
+  document.querySelectorAll(".row[data-i]").forEach(r=>r.onclick=()=>renderMyWordForm(+r.dataset.i,query));
+}
+function renderMyWordForm(idx,backQuery,presetWord){
+  const isNew=idx<0;
+  const w=isNew?{question:presetWord||"",answer:"",note:"",example:"",exampleJa:""}:MYWORDS[idx];
+  const F=(label,id,val,ph)=>`<div class="field"><label>${label}</label>
+    <input id="${id}" value="${esc(val)}" placeholder="${ph||""}" autocapitalize="off" autocorrect="off"></div>`;
+  screen.innerHTML=`
+    <div class="navbar"><button class="back" id="bk">← マイ単語帳</button>
+      <div class="nav-title"><b>${isNew?"単語を登録":"編集"}</b></div></div>
+    ${F("単語（英語）","mwQ",w.question,"例：thrive")}
+    ${F("意味","mwA",w.answer,"例：繁栄する・成長する")}
+    ${F("メモ（任意）","mwN",w.note||"","語源・使い方など")}
+    ${F("例文（任意）","mwE",w.example||"","The business thrived.")}
+    ${F("例文の訳（任意）","mwEj",w.exampleJa||"","その事業は繁栄した。")}
+    <button class="btn primary" id="mwSave">${isNew?"登録する":"保存する"}</button>
+    ${isNew?"":`<button class="btn danger" id="mwDel">この単語を削除</button>`}`;
+  $("#bk").onclick=()=>renderMyVocab(backQuery);
+  setTimeout(()=>{const e=$("#mwQ");if(e&&isNew&&!presetWord)e.focus();},0);
+  $("#mwSave").onclick=async()=>{
+    const v=id=>$(id).value.trim();
+    if(!v("#mwQ")||!v("#mwA")){toast("単語と意味は必須です");return;}
+    const next={question:v("#mwQ"),answer:v("#mwA"),note:v("#mwN"),
+      example:v("#mwE"),exampleJa:v("#mwEj"),
+      book:MYBOOK,section:"登録した単語",type:"word",category:"マイ単語",choices:[]};
+    if(isNew)MYWORDS.push(next);else MYWORDS[idx]={...MYWORDS[idx],...next};
+    await saveMyWords();
+    toast(isNew?"登録しました":"保存しました");
+    renderMyVocab(backQuery);
+  };
+  const del=$("#mwDel");
+  if(del)del.onclick=async()=>{
+    if(!confirm("この単語を削除しますか？"))return;
+    MYWORDS.splice(idx,1);await saveMyWords();
+    toast("削除しました");renderMyVocab(backQuery);
   };
 }
 
@@ -1922,7 +2020,7 @@ function renderSettings(){
   $("#bkup").onclick=async()=>{
     const backup={
       _format:"vocab-backup",_version:1,_exportedAt:new Date().toISOString(),
-      settings:SETTINGS,daily:DAILY,mylists:MYLISTS,flash:FLASH,
+      settings:SETTINGS,daily:DAILY,mylists:MYLISTS,flash:FLASH,mywords:MYWORDS,
       progress:Object.fromEntries(PROG)
     };
     const blob=new Blob([JSON.stringify(backup,null,2)],{type:"application/json"});
@@ -2125,6 +2223,7 @@ $("#restoreInput").addEventListener("change",e=>{
       DAILY=data.daily||{};
       if(data.mylists)MYLISTS=data.mylists;
       if(data.flash)FLASH=data.flash;
+      if(data.mywords){MYWORDS=data.mywords;await DB.put("kv","mywords",MYWORDS);rebuildQuestions();}
       await DB.put("kv","settings",SETTINGS);
       await DB.put("kv","daily",DAILY);
       await DB.put("kv","mylists",MYLISTS);
@@ -2154,7 +2253,7 @@ $("#restoreInput").addEventListener("change",e=>{
       await DB.put("kv","library",lib);
     }
     LIBRARY=lib;
-    QUESTIONS=LIBRARY.flatMap(b=>b.items);
+    const mw=await DB.get("kv","mywords");if(mw)MYWORDS=mw;
     const st=await DB.get("kv","settings");if(st)SETTINGS={...SETTINGS,...st};
     if(!SETTINGS.goalScope||typeof SETTINGS.goalScope!=="object")SETTINGS.goalScope={books:[],cats:[]};
     if(!SETTINGS.goalScope.books)SETTINGS.goalScope.books=[];
@@ -2164,10 +2263,11 @@ $("#restoreInput").addEventListener("change",e=>{
     const ml=await DB.get("kv","mylists");if(ml)MYLISTS=ml;
     const fl=await DB.get("kv","flash");if(fl)FLASH=fl;
     PROG=new Map(await DB.entries("progress"));
+    rebuildQuestions();
   }catch(err){
     console.error("DB init failed",err);
     LIBRARY=[{name:"サンプル教材",items:loadCSVText(DEFAULT_CSV)}];
-    QUESTIONS=LIBRARY.flatMap(b=>b.items);
+    rebuildQuestions();
   }
   renderHome();
 })();
