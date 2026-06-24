@@ -299,6 +299,8 @@
   .fc-nav.fc-next{background:var(--gold);color:#0c0d10;border-color:var(--gold)!important;}
   .fc-nav:disabled{opacity:.35;cursor:default;}
   .filter-chip.dimchip{opacity:.4;}
+  .fc-swipehint{text-align:center;font-size:11px;color:var(--sub);letter-spacing:2px;
+    font-family:'Archivo';margin:12px 0 2px;opacity:.6;}
   .flash-meta{display:flex;justify-content:space-between;font-family:'Archivo';font-size:11px;color:var(--sub);letter-spacing:1px;margin-bottom:14px;}
   .flash-toolbar{display:flex;gap:8px;margin-bottom:16px;}
   .flash-toggle{flex:1;text-align:center;background:var(--panel);border:1px solid var(--line);border-radius:11px;
@@ -1767,28 +1769,32 @@ function startFlash(cards,label,dir,backFn,mode){
 }
 function renderFlashCard(){
   const fs=flashSession,it=fs.cards[fs.idx];
-  // 上半分＝英語、下半分＝日本語（向きに関わらず位置は固定。英語が上・意味が下）
+  // 上＝英語（単語＋英語例文）, 下＝日本語（訳＋例文訳）
   const enText=esc(it.question), jaText=esc(it.answer);
+  const enEx=it.example?esc(it.example.replace(/_{2,}/,clozeAnswer(it))):"";
+  const jaEx=it.exampleJa?esc(it.exampleJa):"";
   const mark=flashMark(it);
-  const exHTML=it.example?`<div class="fc-ex">${esc(it.example.replace(/_{2,}/,clozeAnswer(it)))}${it.exampleJa?"<br>"+esc(it.exampleJa):""}</div>`:"";
+  const topInner=fs.showEn
+    ? `<div class="fc-en">${enText}</div>${enEx?`<div class="fc-ex">${enEx}</div>`:""}`
+    : `<div class="fc-tap">英語を表示（タップ）</div>`;
+  const botInner=fs.showJa
+    ? `<div class="fc-ja">${jaText}</div>${jaEx?`<div class="fc-ex">${jaEx}</div>`:""}`
+    : `<div class="fc-tap">意味を表示（タップ）</div>`;
   screen.innerHTML=`
     <div class="navbar"><button class="back" id="bk">終了</button>
       <div class="nav-title"><b>${esc(fs.label)}</b> · 単語帳</div></div>
     <div class="flash-meta"><span>${String(fs.idx+1).padStart(2,'0')} / ${String(fs.cards.length).padStart(2,'0')}</span>
-      <span>覚えた ${flashStats(fs.cards).known} / ${fs.cards.length}</span></div>
+      <span>${fs.mode==="browse"?"めくり":"覚えた "+flashStats(fs.cards).known+" / "+fs.cards.length}</span></div>
     <div class="track"><div style="width:${fs.idx/fs.cards.length*100}%"></div></div>
     <div style="height:14px"></div>
-    <div class="flash-card">
+    <div class="flash-card" id="card">
       <button class="flash-speak" id="fspeak" aria-label="発音"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a9 9 0 0 1 0 14"/></svg></button>
       ${mark?`<div class="fc-mark ${mark}">${mark==="known"?"覚えた":"まだ"}</div>`:""}
-      <div class="fc-half fc-top" id="topHalf">
-        ${fs.showEn?`<div class="fc-en">${enText}</div>`:`<div class="fc-tap">英語を表示（タップ）</div>`}
-      </div>
+      <div class="fc-half fc-top" id="topHalf">${topInner}</div>
       <div class="fc-line"></div>
-      <div class="fc-half fc-bottom" id="botHalf">
-        ${fs.showJa?`<div class="fc-ja">${jaText}</div>${exHTML}`:`<div class="fc-tap">意味を表示（タップ）</div>`}
-      </div>
+      <div class="fc-half fc-bottom" id="botHalf">${botInner}</div>
     </div>
+    ${fs.mode==="browse"?`<div class="fc-swipehint">← スワイプでめくる →</div>`:""}
     <div class="flash-actions">
       ${fs.mode==="browse"
         ? `<button class="fc-nav" id="prev" ${fs.idx===0?"disabled":""}>← 戻る</button>
@@ -1801,15 +1807,22 @@ function renderFlashCard(){
   $("#fspeak").onclick=e=>{e.stopPropagation();speak(it.question,$("#fspeak"));};
   $("#topHalf").onclick=()=>{fs.showEn=!fs.showEn;renderFlashCard();};
   $("#botHalf").onclick=()=>{fs.showJa=!fs.showJa;renderFlashCard();};
+
+  const goNext=async()=>{
+    if(fs.mode==="browse"){
+      if(fs.idx+1>=fs.cards.length){renderFlashDone();return;}
+      fs.idx++;fs.showEn=true;fs.showJa=false;renderFlashCard();
+    }
+  };
+  const goPrev=()=>{
+    if(fs.idx===0)return;
+    fs.idx--;fs.showEn=true;fs.showJa=false;renderFlashCard();
+  };
   if(fs.mode==="browse"){
-    const go=(d)=>{
-      const ni=fs.idx+d;
-      if(ni<0)return;
-      if(ni>=fs.cards.length){renderFlashDone();return;}
-      fs.idx=ni;fs.showEn=true;fs.showJa=false;renderFlashCard();
-    };
-    const pv=$("#prev");if(pv)pv.onclick=()=>go(-1);
-    $("#fwd").onclick=()=>go(1);
+    const pv=$("#prev");if(pv)pv.onclick=goPrev;
+    $("#fwd").onclick=goNext;
+    // 左右スワイプでめくる
+    attachSwipe($("#card"),goNext,goPrev);
   }else{
     const next=async(mark)=>{
       await setFlashMark(it,mark);
@@ -1819,6 +1832,25 @@ function renderFlashCard(){
     $("#later").onclick=()=>next("later");
     $("#known").onclick=()=>next("known");
   }
+  // カードが切り替わったときだけ1回自動読み上げ（タップ再描画では鳴らさない）
+  if(SETTINGS.autoPlay!==false && fs._spokenIdx!==fs.idx){
+    fs._spokenIdx=fs.idx;
+    setTimeout(()=>{const sp=$("#fspeak");speak(it.question,sp);},300);
+  }
+}
+// 左右スワイプ検出（onLeft=次へ, onRight=戻る）
+function attachSwipe(el,onLeft,onRight){
+  if(!el)return;
+  let x0=null,y0=null;
+  el.addEventListener("touchstart",e=>{const t=e.changedTouches[0];x0=t.clientX;y0=t.clientY;},{passive:true});
+  el.addEventListener("touchend",e=>{
+    if(x0==null)return;
+    const t=e.changedTouches[0];const dx=t.clientX-x0,dy=t.clientY-y0;
+    if(Math.abs(dx)>50&&Math.abs(dx)>Math.abs(dy)*1.5){
+      if(dx<0)onLeft();else onRight();
+    }
+    x0=y0=null;
+  },{passive:true});
 }
 function renderFlashDone(){
   const fs=flashSession;
