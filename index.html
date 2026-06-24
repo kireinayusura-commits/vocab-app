@@ -48,7 +48,7 @@
     display:flex;justify-content:space-around;
     padding:6px 8px calc(6px + var(--sab));
   }
-  .tab{flex:1;max-width:110px;display:flex;flex-direction:column;align-items:center;gap:3px;
+  .tab{flex:1;max-width:90px;display:flex;flex-direction:column;align-items:center;gap:3px;
     background:none;border:none;color:var(--sub);cursor:pointer;padding:5px 0;border-radius:12px;
     font-family:'Noto Sans JP';transition:color .15s;}
   .tab svg{width:23px;height:23px;}
@@ -273,16 +273,21 @@
   .empty{color:var(--sub);font-size:13px;text-align:center;padding:28px 0;line-height:1.7;}
   /* ---- flashcard ---- */
   .flash-card{background:var(--panel);border:1px solid var(--line);border-radius:20px;
-    min-height:300px;display:flex;flex-direction:column;align-items:center;justify-content:center;
-    gap:18px;padding:30px 24px;cursor:pointer;text-align:center;animation:rise .3s;position:relative;}
-  .flash-card .fc-en{font-family:'Archivo';font-weight:700;font-size:clamp(26px,8vw,40px);letter-spacing:.5px;word-break:break-word;line-height:1.2;}
+    min-height:300px;display:flex;flex-direction:column;align-items:stretch;justify-content:stretch;
+    padding:0;text-align:center;animation:rise .3s;position:relative;overflow:hidden;}
+  .fc-half{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:10px;padding:26px 22px;cursor:pointer;min-height:140px;transition:background .12s;}
+  .fc-half:active{background:rgba(255,255,255,.03);}
+  .fc-line{height:1px;background:var(--line);margin:0 18px;}
+  .flash-card .fc-en{font-family:'Archivo';font-weight:700;font-size:clamp(24px,7.5vw,38px);letter-spacing:.5px;word-break:break-word;line-height:1.2;}
   .flash-card .fc-ja{font-size:clamp(17px,5vw,22px);font-weight:500;line-height:1.7;color:var(--gold);}
-  .flash-card .fc-ex{font-size:13.5px;color:var(--sub);line-height:1.7;margin-top:4px;}
-  .flash-card .fc-hint{position:absolute;bottom:14px;font-size:11px;color:var(--sub);letter-spacing:1px;font-family:'Archivo';}
-  .flash-card .fc-mark{position:absolute;top:14px;right:16px;font-size:11px;font-family:'Archivo';font-weight:800;letter-spacing:1px;}
+  .flash-card .fc-ex{font-size:13px;color:var(--sub);line-height:1.7;margin-top:2px;}
+  .fc-tap{font-size:12px;color:var(--sub);letter-spacing:1px;font-family:'Archivo';opacity:.7;
+    border:1px dashed var(--line);border-radius:10px;padding:10px 16px;}
+  .flash-card .fc-mark{position:absolute;top:12px;right:14px;font-size:11px;font-family:'Archivo';font-weight:800;letter-spacing:1px;z-index:2;}
   .fc-mark.known{color:var(--green);}
   .fc-mark.later{color:var(--gold);}
-  .flash-speak{position:absolute;top:12px;left:12px;width:38px;height:38px;border-radius:50%;
+  .flash-speak{position:absolute;top:10px;left:12px;width:38px;height:38px;border-radius:50%;z-index:2;
     background:var(--panel-2);border:1px solid var(--line);color:var(--sub);display:flex;align-items:center;justify-content:center;cursor:pointer;}
   .flash-speak svg{width:17px;height:17px;}
   .flash-actions{display:flex;gap:11px;margin-top:16px;}
@@ -304,6 +309,8 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg><span>ホーム</span></button>
   <button class="tab" data-tab="study">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/></svg><span>学習</span></button>
+  <button class="tab" data-tab="myvocab">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg><span>単語帳</span></button>
   <button class="tab" data-tab="progress">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-7"/><path d="M22 20H2"/></svg><span>進捗</span></button>
   <button class="tab" data-tab="settings">
@@ -1157,7 +1164,7 @@ function switchTab(tab){
   stopTimer();
   currentTab=tab;session=null;flashSession=null;if(synth)synth.cancel();
   document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active",b.dataset.tab===tab));
-  ({home:renderHome,study:renderStudyRoot,progress:renderProgress,settings:renderSettings})[tab]();
+  ({home:renderHome,study:renderStudyRoot,myvocab:renderMyVocab,progress:renderProgress,settings:renderSettings})[tab]();
   window.scrollTo(0,0);
 }
 document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>switchTab(b.dataset.tab));
@@ -1250,10 +1257,6 @@ function renderStudyRoot(){
       <div class="ic">Review</div><h3>復習する</h3>
       <p>${(()=>{const n=needsReviewCount();return n>0?`要復習が <b style="color:var(--gold)">${n}</b> 問あります。間違えた問題・わからなかった問題をまとめて復習できます。`:"間違えた問題・わからなかった問題をまとめて復習できます。";})()}</p>
     </div>
-    <button class="row accent" id="myvocabCard" style="margin-bottom:10px">
-      <div class="row-main"><div class="row-title">マイ単語帳</div>
-      <div class="row-sub">${MYWORDS.length?`登録 ${MYWORDS.length} 語 · 検索・登録・復習`:"知らない単語を登録して自分の辞書を育てる"}</div></div>
-      <div class="row-arrow">→</div></button>
     <button class="row" id="mylistCard" style="margin-bottom:10px">
       <div class="row-main"><div class="row-title">マイリスト学習</div>
       <div class="row-sub">${MYLISTS.length?`${MYLISTS.length} 件のリスト`:"教材・品詞をまたいで自分の範囲を作成"}</div></div>
@@ -1271,10 +1274,9 @@ function renderStudyRoot(){
           <div class="row-sub">${sectionsOf(b).length} セクション · ${n} 問</div></div>
           <div class="row-arrow">→</div></button>`;}).join("")}
     </div>`;
-  $("#reviewCard").onclick=renderReviewScope;
-  $("#myvocabCard").onclick=renderMyVocab;
-  $("#mylistCard").onclick=renderMyLists;
-  $("#flashCard").onclick=renderFlashBooks;
+  $("#reviewCard").onclick=()=>renderReviewScope();
+  $("#mylistCard").onclick=()=>renderMyLists();
+  $("#flashCard").onclick=()=>renderFlashBooks();
   document.querySelectorAll(".row[data-book]").forEach(r=>r.onclick=()=>renderSections(decodeURIComponent(r.dataset.book)));
 }
 function sectionMastery(book,sec){
@@ -1531,7 +1533,7 @@ function renderMyVocab(query){
   const inMy=new Set(MYWORDS.map(wordKey));
   const otherHits=q?QUESTIONS.filter(d=>d.book!==MYBOOK&&!inMy.has(wordKey(d))&&(d.question.toLowerCase().includes(q)||(d.answer||"").toLowerCase().includes(q))).slice(0,30):[];
   screen.innerHTML=`
-    <div class="navbar"><button class="back" id="bk">← 学習</button><div class="nav-title"><b>マイ単語帳</b></div></div>
+    ${currentTab==="myvocab"?`<div class="lt-eyebrow">My Vocabulary</div>`:`<div class="navbar"><button class="back" id="bk">← 学習</button><div class="nav-title"><b>マイ単語帳</b></div></div>`}
     <div class="lt" style="font-size:22px">マイ単語帳</div>
     <div class="lt-sub">登録 ${MYWORDS.length} 語。知らない単語を登録して、自分の辞書を育てましょう。</div>
     <input class="search" id="mvSearch" placeholder="単語・意味で検索（全教材を横断）" value="${esc(query||"")}">
@@ -1555,7 +1557,7 @@ function renderMyVocab(query){
           <div class="row-sub">${esc(d.answer)} · ${esc(d.book)}</div></div>
           ${statusBadgeShort(d)}</div>`).join("")}</div>`:""}
     ${q&&!list.length?`<button class="btn primary" id="mvAddThis" style="margin-top:14px">「${esc(query)}」をマイ単語帳に登録</button>`:""}`;
-  $("#bk").onclick=renderStudyRoot;
+  const bk=$("#bk");if(bk)bk.onclick=renderStudyRoot;
   const sf=$("#mvSearch");
   let t;sf.oninput=()=>{clearTimeout(t);t=setTimeout(()=>renderMyVocab(sf.value),180);};
   $("#mvAdd").onclick=()=>renderMyWordForm(-1,query);
@@ -1707,15 +1709,19 @@ function renderFlashStart(items,label,backFn){
 }
 let flashSession=null;
 function startFlash(cards,label,dir,backFn){
-  flashSession={cards,label,dir,backFn,idx:0,revealed:false};
+  // showEn/showJa: それぞれの面の表示状態。英→日では最初は日本語(意味)を隠す。
+  flashSession={cards,label,dir,backFn,idx:0,
+    showEn:true,showJa:(dir!=="en2ja")?false:false};
+  // 既定：英語面は表示、意味面は隠す（思い出してから下をタップ）
+  flashSession.showEn=true;flashSession.showJa=false;
   renderFlashCard();
 }
 function renderFlashCard(){
   const fs=flashSession,it=fs.cards[fs.idx];
-  const front=fs.dir==="en2ja"?esc(it.question):esc(it.answer);
-  const back=fs.dir==="en2ja"?esc(it.answer):esc(it.question);
+  // 上半分＝英語、下半分＝日本語（向きに関わらず位置は固定。英語が上・意味が下）
+  const enText=esc(it.question), jaText=esc(it.answer);
   const mark=flashMark(it);
-  const exHTML=(it.example&&fs.revealed)?`<div class="fc-ex">${esc(it.example.replace(/_{2,}/,clozeAnswer(it)))}${it.exampleJa?"<br>"+esc(it.exampleJa):""}</div>`:"";
+  const exHTML=it.example?`<div class="fc-ex">${esc(it.example.replace(/_{2,}/,clozeAnswer(it)))}${it.exampleJa?"<br>"+esc(it.exampleJa):""}</div>`:"";
   screen.innerHTML=`
     <div class="navbar"><button class="back" id="bk">終了</button>
       <div class="nav-title"><b>${esc(fs.label)}</b> · 単語帳</div></div>
@@ -1723,11 +1729,16 @@ function renderFlashCard(){
       <span>覚えた ${flashStats(fs.cards).known} / ${fs.cards.length}</span></div>
     <div class="track"><div style="width:${fs.idx/fs.cards.length*100}%"></div></div>
     <div style="height:14px"></div>
-    <div class="flash-card" id="card">
+    <div class="flash-card">
       <button class="flash-speak" id="fspeak" aria-label="発音"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a9 9 0 0 1 0 14"/></svg></button>
       ${mark?`<div class="fc-mark ${mark}">${mark==="known"?"覚えた":"まだ"}</div>`:""}
-      <div class="fc-en">${front}</div>
-      ${fs.revealed?`<div class="fc-ja">${back}</div>${exHTML}`:`<div class="fc-hint">タップで意味を表示</div>`}
+      <div class="fc-half fc-top" id="topHalf">
+        ${fs.showEn?`<div class="fc-en">${enText}</div>`:`<div class="fc-tap">英語を表示（タップ）</div>`}
+      </div>
+      <div class="fc-line"></div>
+      <div class="fc-half fc-bottom" id="botHalf">
+        ${fs.showJa?`<div class="fc-ja">${jaText}</div>${exHTML}`:`<div class="fc-tap">意味を表示（タップ）</div>`}
+      </div>
     </div>
     <div class="flash-actions">
       <button class="fc-later" id="later">まだ</button>
@@ -1736,15 +1747,15 @@ function renderFlashCard(){
   window.scrollTo(0,0);
   $("#bk").onclick=()=>{flashSession=null;(fs.backFn||renderFlashBooks)();};
   $("#fspeak").onclick=e=>{e.stopPropagation();speak(it.question,$("#fspeak"));};
-  $("#card").onclick=()=>{fs.revealed=!fs.revealed;renderFlashCard();};
+  $("#topHalf").onclick=()=>{fs.showEn=!fs.showEn;renderFlashCard();};
+  $("#botHalf").onclick=()=>{fs.showJa=!fs.showJa;renderFlashCard();};
   const next=async(mark)=>{
     await setFlashMark(it,mark);
     if(fs.idx+1>=fs.cards.length){renderFlashDone();}
-    else{fs.idx++;fs.revealed=false;renderFlashCard();}
+    else{fs.idx++;fs.showEn=true;fs.showJa=false;renderFlashCard();}
   };
   $("#later").onclick=()=>next("later");
   $("#known").onclick=()=>next("known");
-  // 英→日で表向きが英語のときは自動発音はしない（インプットなので任意）
 }
 function renderFlashDone(){
   const fs=flashSession;
