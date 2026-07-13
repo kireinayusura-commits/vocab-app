@@ -562,13 +562,29 @@ async function syncLibrary(){
   await DB.put("kv","library",LIBRARY);
 }
 function rebuildQuestions(){
-  // 各単語に所属（教材・セクション）を補完
-  LIBRARY.forEach(b=>b.items.forEach(it=>{
-    it.book=b.name;
-    if(!it.section)it.section="未分類";
-    if(!it.type)it.type="word";
-  }));
+  // 各単語に所属（教材・セクション）を補完し、教材のセクション一覧を維持する
+  LIBRARY.forEach(b=>{
+    if(!Array.isArray(b.sections))b.sections=[];
+    b.items.forEach(it=>{
+      it.book=b.name;
+      if(!it.section)it.section="未分類";
+      if(!it.type)it.type="word";
+      // 単語が持つセクションは必ず一覧に含める
+      if(!b.sections.includes(it.section))b.sections.push(it.section);
+    });
+  });
   QUESTIONS=LIBRARY.flatMap(b=>b.items);
+}
+// 教材にセクションを作る（単語が0語でも存在できる）
+async function createSection(book,section){
+  if(!book||!section)return false;
+  let b=LIBRARY.find(x=>x.name===book);
+  if(!b){b={name:book,items:[],sections:[]};LIBRARY.push(b);}
+  if(!Array.isArray(b.sections))b.sections=[];
+  if(b.sections.includes(section))return false;
+  b.sections.push(section);
+  await syncLibrary();
+  return true;
 }
 // 旧マイ単語帳（別枠 mywords）を普通の教材へ移行する
 async function migrateMyWords(){
@@ -584,7 +600,7 @@ async function migrateMyWords(){
   }));
   const i=LIBRARY.findIndex(b=>b.name===LEGACY_MYBOOK);
   if(i>=0)LIBRARY[i].items=[...LIBRARY[i].items,...items];
-  else LIBRARY.push({name:LEGACY_MYBOOK,items});
+  else LIBRARY.push({name:LEGACY_MYBOOK,items,sections:[]});
   await DB.put("kv","library",LIBRARY);
   await DB.del("kv","mywords");     // 移行済みなので旧データは削除
   rebuildQuestions();
@@ -594,14 +610,16 @@ async function migrateMyWords(){
 async function createBook(name){
   if(!name)return false;
   if(LIBRARY.some(b=>b.name===name))return false;
-  LIBRARY.push({name,items:[]});
+  LIBRARY.push({name,items:[],sections:[]});
   await syncLibrary();
   return true;
 }
 // 単語を教材・セクションに追加
 async function addWord(book,section,w){
   let b=LIBRARY.find(x=>x.name===book);
-  if(!b){b={name:book,items:[]};LIBRARY.push(b);}
+  if(!b){b={name:book,items:[],sections:[]};LIBRARY.push(b);}
+  if(!Array.isArray(b.sections))b.sections=[];
+  if(section&&!b.sections.includes(section))b.sections.push(section);
   b.items.push({...w,book,section,type:w.type||"word",choices:[]});
   await syncLibrary();
 }
@@ -1305,7 +1323,13 @@ function startTumbleReview(){
 
 /* ---------- STUDY (hierarchical) ---------- */
 function booksList(){return LIBRARY.map(b=>b.name);}
-function sectionsOf(b){return uniq(QUESTIONS.filter(d=>d.book===b).map(d=>d.section));}
+function sectionsOf(b){
+  const bk=LIBRARY.find(x=>x.name===b);
+  if(!bk)return uniq(QUESTIONS.filter(d=>d.book===b).map(d=>d.section));
+  // 明示的なセクション一覧（単語0語のセクションも含む）＋念のため単語側から拾う
+  const fromWords=uniq(bk.items.map(d=>d.section).filter(s=>s));
+  return uniq([...(bk.sections||[]),...fromWords]);
+}
 function categoriesOf(b,s){return uniq(QUESTIONS.filter(d=>d.book===b&&d.section===s).map(d=>d.category));}
 function itemsOf(b,s,c){return QUESTIONS.filter(d=>(b==null||d.book===b)&&(s==null||d.section===s)&&(c==null||d.category===c));}
 
@@ -1675,11 +1699,14 @@ function renderFlashMylists(backFn){
 const POS_LIST=["名詞","動詞","形容詞","副詞","熟語","前置詞","接続詞"];
 // 登録先を決める画面（教材・セクション・分類タグを一度だけ選ぶ）
 function renderRegisterSetup(presetWord,backQuery){
-  const books=booksList();
-  let book=SETTINGS.lastBook&&books.includes(SETTINGS.lastBook)?SETTINGS.lastBook:(books[0]||"");
+  let book=SETTINGS.lastBook||"";
   let section=SETTINGS.lastSection||"";
   const draw=()=>{
+    const books=booksList();                 // 毎回最新を読む（新規作成が即反映される）
+    if(book&&!books.includes(book))book="";  // 消えた教材は選択解除
+    if(!book&&books.length)book=books[0];
     const secs=book?sectionsOf(book):[];
+    if(section&&!secs.includes(section))section="";
     screen.innerHTML=`
       <div class="navbar"><button class="back" id="bk">← 単語帳</button>
         <div class="nav-title"><b>登録先を選ぶ</b></div></div>
@@ -1696,7 +1723,7 @@ function renderRegisterSetup(presetWord,backQuery){
       ${book?`<div class="chips" id="secChips">
         ${secs.map(s=>`<button class="filter-chip ${s===section?'on':''}" data-s="${encodeURIComponent(s)}">${esc(s)}</button>`).join("")}
         <button class="filter-chip" id="newSec">＋ 新しいセクション</button>
-      </div>`:`<div class="empty">先に教材を選んでください。</div>`}
+      </div>`:`<div class="empty">先に教材を作ってください。</div>`}
 
       <button class="btn primary" id="go" style="margin-top:22px">この登録先で始める</button>
       <button class="btn ghost" id="csvHere" style="margin-top:10px">この登録先にCSVで一括取り込み</button>
@@ -1704,16 +1731,25 @@ function renderRegisterSetup(presetWord,backQuery){
     $("#bk").onclick=()=>renderMyVocab(backQuery);
     document.querySelectorAll("[data-b]").forEach(c=>c.onclick=()=>{
       book=decodeURIComponent(c.dataset.b);section="";draw();});
-    $("#newBook").onclick=()=>{
+    $("#newBook").onclick=async()=>{
       const n=prompt("新しい教材の名前（例：A先生の講義）");
       if(!n||!n.trim())return;
-      createBook(n.trim()).then(()=>{book=n.trim();section="";draw();});
+      const name=n.trim();
+      await createBook(name);      // 保存してから再描画 → すぐ表示される
+      book=name;section="";
+      draw();
+      toast(`教材「${name}」を作成しました`);
     };
     const ns=$("#newSec");
-    if(ns)ns.onclick=()=>{
+    if(ns)ns.onclick=async()=>{
+      if(!book){toast("先に教材を選んでください");return;}
       const n=prompt("新しいセクションの名前（例：第3回）");
       if(!n||!n.trim())return;
-      section=n.trim();draw();
+      const name=n.trim();
+      await createSection(book,name);   // セクションを実体として保存（単語0語でも残る）
+      section=name;
+      draw();
+      toast(`セクション「${name}」を作成しました`);
     };
     document.querySelectorAll("[data-s]").forEach(c=>c.onclick=()=>{
       section=decodeURIComponent(c.dataset.s);draw();});
