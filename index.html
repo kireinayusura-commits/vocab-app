@@ -1095,14 +1095,23 @@ function paintMC(correct,picked){
 async function chooseMC(btn,item,correct,mode,selfUnknown){
   const s=session;if(s.answered)return;s.answered=true;
   const picked=decodeURIComponent(btn.dataset.v);
-  const ok=picked===correct;
+  const pickedCorrect=picked===correct;
   paintMC(correct,btn);
   if(mode==="ja2en")speak(item.question,null);
   if(mode==="cloze_mc")speak(item.example.replace(/_{2,}/,clozeAnswer(item)),null);
-  if(ok)await recordCorrect(item,false,selfUnknown);else await recordWrong(item);
-  let msg=ok?"CORRECT":"正解 → "+correct;
-  if(ok&&selfUnknown)msg="正解（要復習に追加）";  // わからない申告→正解でも復習対象
-  finishAnswer(ok,item,msg,false,selfUnknown);  // selfUnknown正解は再チャレンジ対象
+  // 「わからない」申告時は、四択が合っていても不正解と同じ扱い（習熟度を下げる＋要復習）
+  // ＝ 日本語を見て思い出しただけの単語が定着中以上に上がらないようにする
+  const countsAsCorrect=pickedCorrect&&!selfUnknown;
+  if(countsAsCorrect)await recordCorrect(item,false,false);
+  else await recordWrong(item);
+  let msg;
+  if(selfUnknown){
+    msg=pickedCorrect?"選択は正解。ただし「わからない」のため復習に戻します":"正解 → "+correct;
+  }else{
+    msg=pickedCorrect?"CORRECT":"正解 → "+correct;
+  }
+  // 画面上の正誤表示：selfUnknownは正解扱いにしない（不正解として扱う）
+  finishAnswer(countsAsCorrect,item,msg,false,selfUnknown);
 }
 async function checkTyped(inp,item,mode){
   const s=session;if(s.answered)return;s.answered=true;
