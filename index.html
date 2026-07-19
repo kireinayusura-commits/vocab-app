@@ -1411,14 +1411,14 @@ function renderRange(book,sec){
   const cats=categoriesOf(book,sec);
   const total=itemsOf(book,sec,null).length;
   let selected=new Set();          // 選択中の品詞（空＝全体）
-  let statusFilter="all";          // all/new/review/l1/l2/l3
+  let selStatus=new Set();         // 選択中の習熟度（空＝すべて）複数選択可
   let limit=0;                     // 0=全部
   const countItems=()=>{
     let base=selected.size===0?itemsOf(book,sec,null):itemsOf(book,sec,null).filter(d=>selected.has(d.category));
-    if(statusFilter!=="all")base=base.filter(d=>statusKeyOf(d)===statusFilter);
+    if(selStatus.size)base=base.filter(d=>selStatus.has(statusKeyOf(d)));
     return base;
   };
-  const statusOpts=[["all","すべて"],["new","未学習"],["l1","学習中"],["review","つまずき"],["l2","定着中"],["l3","マスター"]];
+  const statusOpts=[["new","未学習"],["l1","学習中"],["review","つまずき"],["l2","定着中"],["l3","マスター"]];
   screen.innerHTML=`
     <div class="navbar"><button class="back" id="bk">← セクション</button><div class="nav-title"><b>${esc(sec)}</b></div></div>
     <div class="lt" style="font-size:22px">出題範囲を選ぶ</div>
@@ -1431,9 +1431,11 @@ function renderRange(book,sec){
           <h4>${esc(cat)}</h4><div class="cnt">${n} 問</div>
           <div class="cat">${TYPE_LABEL[itemsOf(book,sec,cat)[0].type]||""}</div></div>`;}).join("")}
     </div>
-    <div class="divider"><span>習熟度でしぼる</span></div>
+    <div class="divider"><span>習熟度でしぼる（複数選択可・未選択で全部）</span></div>
     <div class="chips" id="statusChips">
-      ${statusOpts.map(([k,lbl])=>`<button class="filter-chip ${k==='all'?'on':''}" data-st="${k}">${lbl}</button>`).join("")}
+      ${statusOpts.map(([k,lbl])=>{
+        const n=itemsOf(book,sec,null).filter(d=>statusKeyOf(d)===k).length;
+        return `<button class="filter-chip ${n?'':'dimchip'}" data-st="${k}">${lbl} ${n}</button>`;}).join("")}
     </div>
     <div class="divider"><span>出題数</span></div>
     <div class="count-chips" id="countChips">
@@ -1455,8 +1457,9 @@ function renderRange(book,sec){
     refresh();
   });
   document.querySelectorAll("[data-st]").forEach(ch=>ch.onclick=()=>{
-    statusFilter=ch.dataset.st;
-    document.querySelectorAll("[data-st]").forEach(x=>x.classList.toggle("on",x===ch));
+    const k=ch.dataset.st;
+    if(selStatus.has(k))selStatus.delete(k);else selStatus.add(k);
+    ch.classList.toggle("on");
     refresh();
   });
   document.querySelectorAll(".count-chip").forEach(ch=>ch.onclick=()=>{
@@ -1468,7 +1471,7 @@ function renderRange(book,sec){
     let base=shuffle(countItems());
     if(limit>0)base=base.slice(0,limit);
     if(!base.length){toast("対象がありません");return;}
-    const stLabel=statusFilter==="all"?"":" · "+(statusOpts.find(o=>o[0]===statusFilter)[1]);
+    const stLabel=selStatus.size?" · "+statusOpts.filter(o=>selStatus.has(o[0])).map(o=>o[1]).join("・"):"";
     const label=(selected.size===0?`${sec}（全体）`:`${sec} · ${[...selected].join("・")}`)+stLabel;
     renderFormSelect(base,label,()=>renderRange(book,sec));
   };
@@ -1978,13 +1981,13 @@ function renderFlashSections(book){
 function renderFlashStart(items,label,backFn){
   let cats=uniq(items.map(d=>d.category)).filter(c=>c);
   let selCats=new Set();      // 選択した品詞（空＝全部）
-  let statusFilter="all";     // all/new/review/l1/l2/l3
+  let selStatus=new Set();    // 選択中の習熟度（空＝すべて）複数選択可
   let dir="en2ja";
-  const statusOpts=[["all","すべて"],["new","未学習"],["l1","学習中"],["review","つまずき"],["l2","定着中"],["l3","マスター"]];
+  const statusOpts=[["new","未学習"],["l1","学習中"],["review","つまずき"],["l2","定着中"],["l3","マスター"]];
   const pool=()=>{
     let base=items.slice();    // 固定順（登録順・教材順、シャッフルしない）
     if(selCats.size)base=base.filter(d=>selCats.has(d.category));
-    if(statusFilter!=="all")base=base.filter(d=>statusKeyOf(d)===statusFilter);
+    if(selStatus.size)base=base.filter(d=>selStatus.has(statusKeyOf(d)));
     return base;
   };
   const draw=()=>{
@@ -1992,11 +1995,11 @@ function renderFlashStart(items,label,backFn){
       <div class="navbar"><button class="back" id="bk">← 戻る</button><div class="nav-title"><b>${esc(label)}</b></div></div>
       <div class="lt" style="font-size:22px">単語帳の設定</div>
       <div class="lt-sub">前後にめくって確認します。習熟度や品詞でしぼれます。</div>
-      <div class="divider"><span>習熟度でしぼる</span></div>
+      <div class="divider"><span>習熟度でしぼる（複数選択可・未選択で全部）</span></div>
       <div class="chips" id="statusChips">
         ${statusOpts.map(([k,lbl])=>{
-          const n=k==="all"?items.length:items.filter(d=>statusKeyOf(d)===k).length;
-          return `<button class="filter-chip ${statusFilter===k?'on':''} ${n?'':'dimchip'}" data-st="${k}">${lbl}${k==="all"?"":` ${n}`}</button>`;}).join("")}
+          const n=items.filter(d=>statusKeyOf(d)===k).length;
+          return `<button class="filter-chip ${selStatus.has(k)?'on':''} ${n?'':'dimchip'}" data-st="${k}">${lbl} ${n}</button>`;}).join("")}
       </div>
       ${cats.length>1?`<div class="divider"><span>品詞でしぼる（未選択で全部）</span></div>
         <div class="chips" id="catChips">${cats.map(c=>`<button class="filter-chip ${selCats.has(c)?'on':''}" data-c="${encodeURIComponent(c)}">${esc(c)}</button>`).join("")}</div>`:""}
@@ -2010,8 +2013,9 @@ function renderFlashStart(items,label,backFn){
     $("#dirEnJa").onclick=()=>{dir="en2ja";draw();};
     $("#dirJaEn").onclick=()=>{dir="ja2en";draw();};
     document.querySelectorAll("[data-st]").forEach(ch=>ch.onclick=()=>{
-      statusFilter=ch.dataset.st;
-      document.querySelectorAll("[data-st]").forEach(x=>x.classList.toggle("on",x===ch));
+      const k=ch.dataset.st;
+      if(selStatus.has(k))selStatus.delete(k);else selStatus.add(k);
+      ch.classList.toggle("on");
       $("#cnt").textContent=pool().length;});
     document.querySelectorAll("[data-c]").forEach(ch=>ch.onclick=()=>{
       const c=decodeURIComponent(ch.dataset.c);if(selCats.has(c))selCats.delete(c);else selCats.add(c);
@@ -2019,7 +2023,7 @@ function renderFlashStart(items,label,backFn){
     $("#start").onclick=()=>{
       const p=pool();
       if(!p.length){toast("対象がありません");return;}
-      const stLabel=statusFilter==="all"?"":" · "+statusOpts.find(o=>o[0]===statusFilter)[1];
+      const stLabel=selStatus.size?" · "+statusOpts.filter(o=>selStatus.has(o[0])).map(o=>o[1]).join("・"):"";
       startFlash(p,label+stLabel,dir,backFn);   // 固定順のまま
     };
   };
