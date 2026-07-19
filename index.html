@@ -1978,17 +1978,26 @@ function renderFlashSections(book){
 function renderFlashStart(items,label,backFn){
   let cats=uniq(items.map(d=>d.category)).filter(c=>c);
   let selCats=new Set();      // 選択した品詞（空＝全部）
+  let statusFilter="all";     // all/new/review/l1/l2/l3
   let dir="en2ja";
+  const statusOpts=[["all","すべて"],["new","未学習"],["l1","学習中"],["review","つまずき"],["l2","定着中"],["l3","マスター"]];
   const pool=()=>{
     let base=items.slice();    // 固定順（登録順・教材順、シャッフルしない）
     if(selCats.size)base=base.filter(d=>selCats.has(d.category));
+    if(statusFilter!=="all")base=base.filter(d=>statusKeyOf(d)===statusFilter);
     return base;
   };
   const draw=()=>{
     screen.innerHTML=`
       <div class="navbar"><button class="back" id="bk">← 戻る</button><div class="nav-title"><b>${esc(label)}</b></div></div>
       <div class="lt" style="font-size:22px">単語帳の設定</div>
-      <div class="lt-sub">前後にめくって確認します。${cats.length>1?"品詞でしぼれます。":""}</div>
+      <div class="lt-sub">前後にめくって確認します。習熟度や品詞でしぼれます。</div>
+      <div class="divider"><span>習熟度でしぼる</span></div>
+      <div class="chips" id="statusChips">
+        ${statusOpts.map(([k,lbl])=>{
+          const n=k==="all"?items.length:items.filter(d=>statusKeyOf(d)===k).length;
+          return `<button class="filter-chip ${statusFilter===k?'on':''} ${n?'':'dimchip'}" data-st="${k}">${lbl}${k==="all"?"":` ${n}`}</button>`;}).join("")}
+      </div>
       ${cats.length>1?`<div class="divider"><span>品詞でしぼる（未選択で全部）</span></div>
         <div class="chips" id="catChips">${cats.map(c=>`<button class="filter-chip ${selCats.has(c)?'on':''}" data-c="${encodeURIComponent(c)}">${esc(c)}</button>`).join("")}</div>`:""}
       <div class="divider"><span>表示の向き</span></div>
@@ -2000,13 +2009,18 @@ function renderFlashStart(items,label,backFn){
     $("#bk").onclick=backFn;
     $("#dirEnJa").onclick=()=>{dir="en2ja";draw();};
     $("#dirJaEn").onclick=()=>{dir="ja2en";draw();};
+    document.querySelectorAll("[data-st]").forEach(ch=>ch.onclick=()=>{
+      statusFilter=ch.dataset.st;
+      document.querySelectorAll("[data-st]").forEach(x=>x.classList.toggle("on",x===ch));
+      $("#cnt").textContent=pool().length;});
     document.querySelectorAll("[data-c]").forEach(ch=>ch.onclick=()=>{
       const c=decodeURIComponent(ch.dataset.c);if(selCats.has(c))selCats.delete(c);else selCats.add(c);
       $("#cnt").textContent=pool().length;ch.classList.toggle("on");});
     $("#start").onclick=()=>{
       const p=pool();
       if(!p.length){toast("対象がありません");return;}
-      startFlash(p,label,dir,backFn);   // 固定順のまま
+      const stLabel=statusFilter==="all"?"":" · "+statusOpts.find(o=>o[0]===statusFilter)[1];
+      startFlash(p,label+stLabel,dir,backFn);   // 固定順のまま
     };
   };
   draw();
