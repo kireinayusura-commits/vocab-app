@@ -222,15 +222,18 @@
   .fb.ok{color:var(--green);}
   .fb.no{color:var(--red);}
   .fb .note{display:block;color:var(--sub);font-size:12px;font-weight:400;margin-top:3px;}
-  .next{position:fixed;left:50%;transform:translateX(-50%) translateY(8px);
-    bottom:calc(var(--tabbar-h) + var(--sab) + 14px);z-index:40;
-    width:min(calc(100% - 40px),480px);border:none;cursor:pointer;font-family:'Archivo';font-weight:700;
+  .fb-ex{display:block;color:var(--ink);font-size:13px;font-weight:400;margin-top:8px;line-height:1.55;
+    padding-top:8px;border-top:1px solid var(--line);text-align:left;}
+  .fb-ex .ex-ja{display:block;color:var(--sub);font-size:12px;margin-top:3px;}
+  /* NEXT は position:fixed をやめ、通常フロー内の sticky にする。
+     （fixed は祖先の transform/filter や iOS のビューポート事情で表示されないことがあるため） */
+  .next{position:sticky;bottom:calc(var(--tabbar-h) + var(--sab) + 12px);z-index:40;
+    display:none;width:100%;border:none;cursor:pointer;font-family:'Archivo';font-weight:700;
     font-size:14px;letter-spacing:2px;text-transform:uppercase;color:#0c0d10;padding:17px;border-radius:14px;
-    background:var(--gold);box-shadow:0 8px 24px rgba(0,0,0,.45);
-    opacity:0;pointer-events:none;transition:opacity .2s, transform .2s;}
-  .next.show{opacity:1;pointer-events:auto;transform:translateX(-50%) translateY(0);}
-  /* give quiz content room so fixed NEXT never overlaps the last option */
-  .quiz-pad{padding-bottom:78px;}
+    background:var(--gold);box-shadow:0 8px 24px rgba(0,0,0,.45);margin-top:18px;}
+  .next.show{display:block;animation:rise .2s;}
+  /* 固定表示ではないので余白は最小限でよい */
+  .quiz-pad{padding-bottom:6px;}
   .timer-bar{height:5px;background:var(--panel-2);border-radius:99px;overflow:hidden;margin:-8px 0 18px;}
   .timer-bar>div{height:100%;width:100%;background:var(--green);transition:width .1s linear;}
   .timer-bar>div.warn{background:var(--gold);}
@@ -551,6 +554,7 @@ let CHECK={};                     // wordKey -> true 単語帳の「チェック
 let QUESTIONS=[];                 // flattened view: すべての教材の単語（学習・検索の対象）
 let PROG=new Map();               // wordKey -> progress record
 let SETTINGS={goalDate:"",autoPlay:true,goalScope:{books:[],cats:[]},speechRate:0.92,timed:false,timeSec:8,
+  showPos:false,showExample:true,   // 四択での品詞表示 / 回答後の例文表示
   lastBook:"",lastSection:"",lastCategory:"",lastTag:""};   // 連続登録の引き継ぎ用
 let DAILY={};                     // "YYYY-MM-DD" -> {c,w,tumbles,overcome}
 const $=s=>document.querySelector(s);
@@ -810,7 +814,15 @@ function reviewQueue(items,limit){
 }
 // 「要復習」リスト：間違えた／「わからない」と申告した単語（needsReview=true）
 function needsReviewItems(items){
-  return (items||QUESTIONS).filter(it=>getProg(wordKey(it)).needsReview);
+  const src=items||QUESTIONS;
+  const seen=new Set();const out=[];
+  for(const it of src){
+    if(!getProg(wordKey(it)).needsReview)continue;
+    const k=wordKey(it);
+    if(seen.has(k))continue;   // 同じ単語は1回だけ（複数教材に重複していてもまとめる）
+    seen.add(k);out.push(it);
+  }
+  return out;
 }
 function needsReviewCount(items){return needsReviewItems(items).length;}
 
@@ -834,16 +846,26 @@ function pickVoice(){
   enVoice=vs.slice().sort((a,b)=>score(b)-score(a))[0]||null;
 }
 if(synth){pickVoice();synth.onvoiceschanged=pickVoice;}
+let _lastSpeak={text:"",at:0};
 function speak(text,btn){
   if(!synth)return;
-  synth.cancel();
   const clean=String(text).replace(/_{2,}/g," blank ").replace(/~/g," ").replace(/\s+/g," ").trim();
+  if(!clean)return;
+  const now=Date.now();
+  // 直前と同じ発話が短時間に重なると音が二重（大きく聞こえる）になるのを防ぐ
+  if(clean===_lastSpeak.text && now-_lastSpeak.at<400)return;
+  _lastSpeak={text:clean,at:now};
+  synth.cancel();   // 前の発話を必ず止める（重なり防止）
   const u=new SpeechSynthesisUtterance(clean);
   if(enVoice)u.voice=enVoice;
-  u.lang=(enVoice&&enVoice.lang)||"en-US";u.rate=SETTINGS.speechRate||0.92;
+  u.lang=(enVoice&&enVoice.lang)||"en-US";
+  u.rate=SETTINGS.speechRate||0.92;
+  u.volume=1;u.pitch=1;   // 音量を明示（未指定だと端末により大きく再生されることがある）
   if(btn){btn.classList.add("playing");u.onend=u.onerror=()=>btn.classList.remove("playing");}
   synth.speak(u);
 }
+// 画面遷移などで発話を完全に止める
+function stopSpeak(){if(synth){synth.cancel();}_lastSpeak={text:"",at:0};}
 
 /* ---------- quiz helpers ---------- */
 const TYPE_LABEL={word:"単語",idiom:"熟語",grammar:"文法",order:"並べ替え"};
@@ -945,7 +967,7 @@ function startQuiz(queue,label,chosenMode,returnTo){
 }
 function quitQuiz(){
   stopTimer();
-  if(synth)synth.cancel();
+  stopSpeak();
   session=null;
   (sessionReturn||renderStudyRoot)();
 }
@@ -993,8 +1015,10 @@ function renderQ(){
   }else{ // en2ja  (2段階: わかる/わからない → 4択)
     const grammar=item.type==="grammar";
     speakWord=item.question;
+    const pos=SETTINGS.showPos?posShort(item):"";
+    const posTag=pos?`<span class="pos-badge">${esc(pos)}</span>`:"";
     body=`<div class="qword-row">
-        <div class="${grammar?"qsentence":"qword"}">${esc(item.question)}</div>
+        <div class="${grammar?"qsentence":"qword"}">${esc(item.question)}${posTag}</div>
         <button class="speak-ic" id="speak" aria-label="発音を聞く"><svg class="wave" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a9 9 0 0 1 0 14"/></svg></button>
       </div>
       <div class="gate" id="gate">
@@ -1181,6 +1205,12 @@ function finishAnswer(ok,item,msg,helpUsed,forceReview){
   const s=session;
   const fb=$("#fb");
   let extra=item.note?`<span class="note">${esc(item.note)}</span>`:"";
+  // 回答後に例文を表示（設定オン かつ 例文があるとき）。単語と例文をつなげて覚える助けに。
+  if(SETTINGS.showExample!==false&&item.example){
+    const exEn=esc(item.example.replace(/_{2,}/,clozeAnswer(item)));
+    const exJa=item.exampleJa?`<span class="ex-ja">${esc(item.exampleJa)}</span>`:"";
+    extra+=`<span class="fb-ex">${exEn}${exJa}</span>`;
+  }
   if(ok&&overcomeFlash){msg="克服しました 🎉 "+msg;overcomeFlash=false;}
   fb.innerHTML=esc(msg)+extra;
   fb.className="fb show "+(ok?"ok":"no");
@@ -1192,7 +1222,7 @@ function finishAnswer(ok,item,msg,helpUsed,forceReview){
 }
 function advance(){
   stopTimer();
-  if(synth)synth.cancel();
+  stopSpeak();
   const s=session;s.idx++;
   if(s.idx>=s.total)renderResult();else renderQ();
 }
@@ -1245,7 +1275,7 @@ let currentTab="home";
 function switchTab(tab){
   stopTimer();
   currentTab=tab;
-  if(synth)synth.cancel();
+  stopSpeak();
   document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active",b.dataset.tab===tab));
   if(tab==="study"){
     // 中断していた作業を自動再開（単語帳のめくり → 学習の問題 → なければ学習トップ）
@@ -1627,9 +1657,8 @@ function renderMyListForm(i){
 /* ---- My Vocabulary（マイ単語帳）— 自分で育てる辞書。学習・検索に合流 ---- */
 function statusBadgeShort(it){const b=statusBadge(getProg(wordKey(it)));return `<span class="lvl-badge ${b.cls}">${b.label}</span>`;}
 function renderMyVocab(query){
-  sessionReturn=()=>renderMyVocab(query);
-  const q=(query||"").trim().toLowerCase();
-  const hits=q?QUESTIONS.filter(d=>d.question.toLowerCase().includes(q)||(d.answer||"").toLowerCase().includes(q)).slice(0,50):[];
+  let curQuery=query||"";                   // 現在の検索語（結果だけ差し替えるため保持）
+  sessionReturn=()=>renderMyVocab(curQuery);
   const reviewN=needsReviewItems(QUESTIONS).length;
   const checkedN=checkedItems().length;
   const totalWords=QUESTIONS.length;
@@ -1663,31 +1692,54 @@ function renderMyVocab(query){
       <div class="row-sub">${MYLISTS.length} 件の条件付きリスト</div></div><div class="row-arrow">→</div></button>`:""}
 
     <div class="divider"><span>調べる</span></div>
-    <input class="search" id="mvSearch" placeholder="単語・意味で検索" value="${esc(query||"")}">
-    ${q?`<div class="divider"><span>検索結果 ${hits.length}</span></div>
-      ${hits.length?`<div class="list">${hits.map(d=>{
+    <input class="search" id="mvSearch" placeholder="単語・意味で検索" value="${esc(query||"")}"
+      autocapitalize="off" autocorrect="off" autocomplete="off">
+    <div id="mvResults"></div>`;
+  const bk=$("#bk");if(bk)bk.onclick=renderStudyRoot;
+  $("#mvAdd").onclick=()=>renderRegisterSetup(null,curQuery);
+  $("#mvBooks").onclick=()=>renderLibrary();
+  $("#flAll").onclick=renderFlashBooks;
+  $("#flReview").onclick=()=>{const r=needsReviewItems(QUESTIONS);if(!r.length){toast("要復習の単語はありません");return;}renderFlashStart(r,"要復習",()=>renderMyVocab(curQuery));};
+  $("#flCheck").onclick=()=>{const c=checkedItems();if(!c.length){toast("チェックした単語はありません");return;}renderFlashStart(c,"チェックした単語",()=>renderMyVocab(curQuery));};
+  const fml=$("#flMylist");if(fml)fml.onclick=()=>renderFlashMylists(()=>renderMyVocab(curQuery));
+
+  // 検索結果だけを差し替える（入力欄は作り直さないのでキーボードが閉じない）
+  const drawResults=(qs)=>{
+    curQuery=qs;
+    const qq=(qs||"").trim().toLowerCase();
+    const box=$("#mvResults");
+    if(!qq){box.innerHTML="";return;}
+    const found=QUESTIONS.filter(d=>d.question.toLowerCase().includes(qq)||(d.answer||"").toLowerCase().includes(qq)).slice(0,50);
+    box.innerHTML=`
+      <div class="divider"><span>検索結果 ${found.length}</span></div>
+      ${found.length?`<div class="list">${found.map(d=>{
         const bi=LIBRARY.findIndex(b=>b.name===d.book);
         const wi=bi>=0?LIBRARY[bi].items.indexOf(d):-1;
         return `<button class="row" data-b="${bi}" data-w="${wi}">
           <div class="row-main"><div class="row-title">${esc(d.question)}</div>
           <div class="row-sub">${esc(d.answer)}</div></div></button>`;}).join("")}</div>`
       :`<div class="empty">見つかりませんでした。</div>`}
-      <button class="btn primary" id="mvAddThis" style="margin-top:14px">「${esc(query)}」を登録する</button>`
-    :""}`;
-  const bk=$("#bk");if(bk)bk.onclick=renderStudyRoot;
-  $("#mvAdd").onclick=()=>renderRegisterSetup(null,query);
-  $("#mvBooks").onclick=()=>renderLibrary();
-  $("#flAll").onclick=renderFlashBooks;
-  $("#flReview").onclick=()=>{const r=needsReviewItems(QUESTIONS);if(!r.length){toast("要復習の単語はありません");return;}renderFlashStart(r,"要復習",()=>renderMyVocab(query));};
-  $("#flCheck").onclick=()=>{const c=checkedItems();if(!c.length){toast("チェックした単語はありません");return;}renderFlashStart(c,"チェックした単語",()=>renderMyVocab(query));};
-  const fml=$("#flMylist");if(fml)fml.onclick=()=>renderFlashMylists(()=>renderMyVocab(query));
+      <button class="btn primary" id="mvAddThis" style="margin-top:14px">「${esc(qs)}」を登録する</button>`;
+    const at=$("#mvAddThis");if(at)at.onclick=()=>renderRegisterSetup(qs,qs);
+    box.querySelectorAll(".row[data-b]").forEach(r=>r.onclick=()=>{
+      const bi=+r.dataset.b,wi=+r.dataset.w;
+      if(bi>=0&&wi>=0)renderWordEdit(bi,wi,()=>renderMyVocab(curQuery));
+    });
+  };
   const sf=$("#mvSearch");
-  let t;sf.oninput=()=>{clearTimeout(t);t=setTimeout(()=>renderMyVocab(sf.value),180);};
-  const at=$("#mvAddThis");if(at)at.onclick=()=>renderRegisterSetup(query,query);
-  document.querySelectorAll(".row[data-b]").forEach(r=>r.onclick=()=>{
-    const bi=+r.dataset.b,wi=+r.dataset.w;
-    if(bi>=0&&wi>=0)renderWordEdit(bi,wi,()=>renderMyVocab(query));
-  });
+  let t;
+  sf.oninput=()=>{
+    clearTimeout(t);
+    const val=sf.value;                       // 入力時点の値を捕捉
+    t=setTimeout(()=>{
+      const active=document.activeElement===sf;
+      const pos=sf.selectionStart;
+      drawResults(val);
+      // 結果差し替えでフォーカスが外れた場合に備えて戻す（iOSで入力が途切れないように）
+      if(active){sf.focus();try{sf.setSelectionRange(pos,pos);}catch(e){}}
+    },220);
+  };
+  drawResults(query||"");   // 初期表示
 }
 // マイリストを単語帳でめくる：リスト選択画面
 function renderFlashMylists(backFn){
@@ -1794,7 +1846,7 @@ function renderRegisterLoop(book,section,presetWord,backQuery){
         <div class="nav-title"><b>${esc(book)}</b> › ${esc(section)}</div></div>
       <div class="reg-head">
         <div class="reg-dest">登録中：<b>${esc(book)} › ${esc(section)}</b></div>
-        <div class="reg-count">${added.length} 語 登録しました</div>
+        <div class="reg-count" id="regCount">${added.length} 語 登録しました</div>
       </div>
       <div class="field"><label>単語・熟語</label>
         <input id="rQ" value="${esc(preset||"")}" placeholder="例：thrive" autocapitalize="off" autocorrect="off"></div>
@@ -1821,11 +1873,11 @@ function renderRegisterLoop(book,section,presetWord,backQuery){
         <div class="field"><label>例文の訳</label><input id="rEj" placeholder="その事業は繁栄した。"></div>
       </div>
       <button class="btn primary" id="rSave" style="margin-top:14px">登録して次へ</button>
-      ${added.length?`<div class="divider"><span>このセッションで登録 ${added.length}</span></div>
+      <div id="regAdded">${added.length?`<div class="divider"><span>このセッションで登録 ${added.length}</span></div>
         <div class="list">${added.slice().reverse().map(w=>`
           <div class="row" style="cursor:default">
             <div class="row-main"><div class="row-title">${esc(w.question)}</div>
-            <div class="row-sub">${esc(w.answer)}${w.tag?" · "+esc(w.tag):""}</div></div></div>`).join("")}</div>`:""}`;
+            <div class="row-sub">${esc(w.answer)}${w.tag?" · "+esc(w.tag):""}</div></div></div>`).join("")}</div>`:""}</div>`;
     $("#bk").onclick=()=>{
       if(added.length)toast(`${added.length} 語を登録しました`);
       renderMyVocab(backQuery);
@@ -1856,7 +1908,19 @@ function renderRegisterLoop(book,section,presetWord,backQuery){
       SETTINGS.lastCategory=cat;SETTINGS.lastTag=tag;
       await DB.put("kv","settings",SETTINGS);
       toast(`「${qq}」を登録`);
-      draw("");   // 入力欄を空にして次の単語へ（登録先・品詞・タグは維持）
+      // 画面を作り直さずに入力欄だけクリア（キーボードが閉じない）
+      const qEl=$("#rQ"),aEl=$("#rA");
+      qEl.value="";aEl.value="";
+      ["#rN","#rE","#rEj"].forEach(id=>{const el=$(id);if(el)el.value="";});
+      // 登録済みリストと件数だけ差し替える
+      const cnt=$("#regCount");if(cnt)cnt.textContent=`${added.length} 語 登録しました`;
+      const lst=$("#regAdded");
+      if(lst)lst.innerHTML=added.length?`<div class="divider"><span>このセッションで登録 ${added.length}</span></div>
+        <div class="list">${added.slice().reverse().map(x=>`
+          <div class="row" style="cursor:default">
+            <div class="row-main"><div class="row-title">${esc(x.question)}</div>
+            <div class="row-sub">${esc(x.answer)}${x.tag?" · "+esc(x.tag):""}</div></div></div>`).join("")}</div>`:"";
+      qEl.focus();   // 次の単語へ即入力できる
     };
   };
   draw(presetWord);
@@ -2325,6 +2389,16 @@ function renderSettings(){
       <div class="t-sub">英→日の四択で単語を自動再生</div></div>
       <button class="switch ${SETTINGS.autoPlay?'on':''}" id="apSwitch"></button>
     </div>
+    <div class="toggle-row">
+      <div class="t-main"><div class="t-title">四択で品詞を表示</div>
+      <div class="t-sub">問題の単語の横に品詞（名・動など）を表示。ヒントを増やしたいとき</div></div>
+      <button class="switch ${SETTINGS.showPos?'on':''}" id="posSwitch"></button>
+    </div>
+    <div class="toggle-row">
+      <div class="t-main"><div class="t-title">回答後に例文を表示</div>
+      <div class="t-sub">答え合わせのあと、例文があれば表示。単語と例文をつなげて覚える</div></div>
+      <button class="switch ${SETTINGS.showExample!==false?'on':''}" id="exSwitch"></button>
+    </div>
     <div class="field"><label>読み上げ速度（${(SETTINGS.speechRate||0.92).toFixed(2)}）</label>
       <input type="range" id="rate" min="0.6" max="1.2" step="0.02" value="${SETTINGS.speechRate||0.92}" style="width:100%"></div>
     <p style="color:var(--sub);font-size:11px;line-height:1.6;margin:-4px 2px 12px">声の質は端末内蔵の音声によります。iPhoneの設定→アクセシビリティ→読み上げコンテンツ→声 で高品質な英語音声を追加すると、より自然になります。</p>
@@ -2370,6 +2444,10 @@ function renderSettings(){
   $("#goalScope").onclick=renderGoalScope;
   $("#apSwitch").onclick=async e=>{SETTINGS.autoPlay=!SETTINGS.autoPlay;await DB.put("kv","settings",SETTINGS);
     e.currentTarget.classList.toggle("on",SETTINGS.autoPlay);};
+  $("#posSwitch").onclick=async e=>{SETTINGS.showPos=!SETTINGS.showPos;await DB.put("kv","settings",SETTINGS);
+    e.currentTarget.classList.toggle("on",SETTINGS.showPos);};
+  $("#exSwitch").onclick=async e=>{SETTINGS.showExample=!(SETTINGS.showExample!==false);await DB.put("kv","settings",SETTINGS);
+    e.currentTarget.classList.toggle("on",SETTINGS.showExample!==false);};
   $("#rate").oninput=async e=>{SETTINGS.speechRate=+e.target.value;
     e.target.previousElementSibling.textContent=`読み上げ速度（${SETTINGS.speechRate.toFixed(2)}）`;
     await DB.put("kv","settings",SETTINGS);};
@@ -2470,27 +2548,37 @@ function renderLibrary(){
 
 /* ---- in-app editor ---- */
 function renderEditorList(query){
-  const q=query.toLowerCase();
-  const hits=QUESTIONS.map((it,i)=>({it,i}))
-    .filter(x=>!q||x.it.question.toLowerCase().includes(q)||x.it.answer.includes(query))
-    .slice(0,60);
+  let curQ=query||"";
   screen.innerHTML=`
     <div class="navbar"><button class="back" id="bk">← 設定</button><div class="nav-title"><b>問題の編集</b> · ${QUESTIONS.length}問</div></div>
-    <input class="search" id="srch" placeholder="単語・意味で検索" value="${esc(query)}">
+    <input class="search" id="srch" placeholder="単語・意味で検索" value="${esc(curQ)}"
+      autocapitalize="off" autocorrect="off" autocomplete="off">
     <button class="btn ghost" id="add" style="margin-bottom:13px">＋ 新しい問題を追加</button>
-    <div class="list">
-      ${hits.map(x=>`<button class="row" data-i="${x.i}">
-        <div class="row-main"><div class="row-title">${esc(x.it.question)}</div>
-        <div class="row-sub">${esc(x.it.answer)} · ${esc(x.it.book)} › ${esc(x.it.section)}</div></div>
-        <div class="row-arrow">›</div></button>`).join("")}
-    </div>
-    ${hits.length>=60?`<div class="empty">60件まで表示。検索で絞り込んでください。</div>`:""}`;
+    <div id="edResults"></div>`;
   $("#bk").onclick=renderSettings;
+  // 検索結果だけを差し替える（入力欄は作り直さない＝キーボードが閉じない）
+  const drawResults=(qs)=>{
+    curQ=qs;
+    const q=(qs||"").toLowerCase();
+    const hits=QUESTIONS.map((it,i)=>({it,i}))
+      .filter(x=>!q||x.it.question.toLowerCase().includes(q)||(x.it.answer||"").includes(qs))
+      .slice(0,60);
+    const box=$("#edResults");
+    box.innerHTML=`
+      <div class="list">
+        ${hits.map(x=>`<button class="row" data-i="${x.i}">
+          <div class="row-main"><div class="row-title">${esc(x.it.question)}</div>
+          <div class="row-sub">${esc(x.it.answer)} · ${esc(x.it.book)} › ${esc(x.it.section)}</div></div>
+          <div class="row-arrow">›</div></button>`).join("")}
+      </div>
+      ${hits.length>=60?`<div class="empty">60件まで表示。検索で絞り込んでください。</div>`:""}`;
+    box.querySelectorAll(".row[data-i]").forEach(r=>r.onclick=()=>renderEditorForm(+r.dataset.i,curQ));
+  };
   const s=$("#srch");
-  s.oninput=()=>renderEditorList(s.value);
-  setTimeout(()=>{if(query)s.focus();},0);
-  $("#add").onclick=()=>renderEditorForm(-1,query);
-  document.querySelectorAll(".row[data-i]").forEach(r=>r.onclick=()=>renderEditorForm(+r.dataset.i,query));
+  let t;
+  s.oninput=()=>{clearTimeout(t);t=setTimeout(()=>drawResults(s.value),180);};
+  $("#add").onclick=()=>renderEditorForm(-1,curQ);
+  drawResults(curQ);
 }
 function renderEditorForm(idx,backQuery){
   const isNew=idx<0;
