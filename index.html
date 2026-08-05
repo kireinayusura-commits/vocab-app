@@ -281,10 +281,12 @@
   .reg-count{font-size:11px;color:var(--sub);margin-top:4px;font-family:'Archivo';letter-spacing:1px;}
   /* ---- flashcard ---- */
   .flash-card{background:var(--panel);border:1px solid var(--line);border-radius:20px;
-    min-height:300px;display:flex;flex-direction:column;align-items:stretch;justify-content:stretch;
+    min-height:62vh;display:flex;flex-direction:column;align-items:stretch;justify-content:stretch;
     padding:0;text-align:center;animation:rise .3s;position:relative;overflow:hidden;}
   .fc-half{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
     gap:10px;padding:26px 22px;cursor:pointer;min-height:140px;transition:background .12s;}
+  /* 上半分は音声ボタン（左上）と重ならないよう上に余白を確保 */
+  .fc-half.fc-top{padding-top:58px;}
   .fc-half:active{background:rgba(255,255,255,.03);}
   .fc-line{height:1px;background:var(--line);margin:0 18px;}
   .flash-card .fc-en{font-family:'Archivo';font-weight:700;font-size:clamp(24px,7.5vw,38px);letter-spacing:.5px;word-break:break-word;line-height:1.2;}
@@ -2166,11 +2168,7 @@ function renderFlashCard(){
         <div class="fc-line"></div>
         <div class="fc-half fc-bottom" id="botHalf">${botInner}</div>
       </div>
-      <div class="fc-swipehint">← スワイプでめくる →</div>
-    </div>
-    <div class="flash-actions">
-      <button class="fc-nav" id="prev" ${fs.idx===0?"disabled":""}>← 戻る</button>
-      <button class="fc-nav fc-next" id="fwd">${fs.idx+1>=fs.cards.length?"終了":"次へ →"}</button>
+      <div class="fc-swipehint">← スワイプでめくる →${fs.idx+1>=fs.cards.length?"（最後のカード）":""}</div>
     </div>`;
   window.scrollTo(0,0);
   $("#bk").onclick=()=>{flashSession=null;(fs.backFn||renderFlashBooks)();};
@@ -2186,9 +2184,7 @@ function renderFlashCard(){
     if(fs.idx===0)return;
     fs.idx--;fs.showEn=true;fs.showJa=false;renderFlashCard();
   };
-  $("#prev").onclick=goPrev;
-  $("#fwd").onclick=goNext;
-  // 左右スワイプ：カード＋下部ヒント周辺の広い範囲で有効
+  // 左右スワイプ：カード＋下部ヒント周辺の広い範囲で有効（ボタンは廃止しスワイプに一本化）
   attachSwipe($("#swipeZone"),goNext,goPrev);
   // カードが切り替わったときだけ1回自動読み上げ（タップ再描画では鳴らさない）
   if(SETTINGS.autoPlay!==false && fs._spokenIdx!==fs.idx){
