@@ -658,6 +658,17 @@ function parseCSV(text){
   if(cur!==""||row.length){row.push(cur);rows.push(row);}
   return rows;
 }
+// セクション名の正規化：「LESSON1 Phrase Focus」→「LESSON 1」
+// LESSON / Lesson / レッスン + 数字 を見つけたら「LESSON 数字」に揃え、以降の語句は取り除く
+function normalizeSection(sec){
+  const s=String(sec||"").trim();
+  if(!s)return "その他";
+  const m=s.match(/(?:lesson|レッスン|lesson\.?|l)\s*[-.:]?\s*(\d+)/i);
+  if(m)return "LESSON "+parseInt(m[1],10);
+  return s;
+}
+// スラッシュ区切りをスペースに：「ordered / to」→「ordered to」
+function slashToSpace(t){return String(t||"").replace(/\s*\/\s*/g," ").replace(/\s+/g," ").trim();}
 function rowsToItems(rows){
   if(!rows.length)return [];
   const head=rows.shift().map(h=>String(h??"").trim().toLowerCase());
@@ -667,12 +678,15 @@ function rowsToItems(rows){
     const get=n=>{const i=idx(n);return i>=0&&r[i]!=null?String(r[i]).trim():"";};
     const q=get("question"),a=get("answer");
     if(!q||!a)continue;
+    const exAns=get("example_answer");
     out.push({
-      book:get("book")||"未分類",section:get("section")||"その他",
+      book:get("book")||"未分類",section:normalizeSection(get("section")||"その他"),
       type:(get("type")||"word").toLowerCase(),category:get("category")||"その他",
-      question:q,answer:a,
-      choices:[get("choice1"),get("choice2"),get("choice3")].filter(x=>x),
-      note:get("note"),example:get("example"),exampleJa:get("example_ja"),exampleAnswer:get("example_answer")
+      question:slashToSpace(q),answer:slashToSpace(a),
+      choices:[get("choice1"),get("choice2"),get("choice3")].map(slashToSpace).filter(x=>x),
+      note:get("note"),example:get("example"),exampleJa:get("example_ja"),
+      // exampleAnswer は「/」を複数空欄の区切りとして使うので、そのまま保持（前後だけ整える）
+      exampleAnswer:String(exAns||"").replace(/\s*\/\s*/g," / ").replace(/\s+/g," ").trim()
     });
   }
   return out;
@@ -877,6 +891,15 @@ function canEnglishAnswer(it){
 }
 function hasExample(it){return !!(it.example&&/_{2,}/.test(it.example));}
 function clozeAnswer(it){return (it.exampleAnswer&&it.exampleAnswer.trim())?it.exampleAnswer.trim():it.question.replace(/~/g,"").trim();}
+// 例文の空欄を答えで埋める。複数空欄なら example_answer の「/」区切りを順に当てる。
+function fillCloze(it){
+  const ex=it.example||"";
+  const blanks=ex.match(/_{2,}/g)||[];
+  if(blanks.length<=1)return ex.replace(/_{2,}/,clozeAnswer(it));
+  const parts=(it.exampleAnswer||"").split("/").map(s=>s.trim()).filter(s=>s);
+  let i=0;
+  return ex.replace(/_{2,}/g,()=> parts[i++] || "____");
+}
 function clozeHTML(it){return esc(it.example).replace(/_{2,}/,'<span class="cloze-gap">____</span>');}
 function levenshtein(a,b){
   a=a.toLowerCase();b=b.toLowerCase();
@@ -1100,7 +1123,9 @@ function renderQ(){
   if(speakWord!==null){
     const sp=$("#speak");
     sp.onclick=()=>speak(speakWord,sp);
-    if(SETTINGS.autoPlay)setTimeout(()=>speak(speakWord,sp),350);
+    // タブ切替でのタブ復帰時は自動読み上げしない（同じ問題が鳴り直す・音量が大きくなるのを防ぐ）
+    if(SETTINGS.autoPlay&&!suppressAutoSpeak)setTimeout(()=>speak(speakWord,sp),350);
+    suppressAutoSpeak=false;
     const ab=$("#autoBtn");
     if(ab)ab.onclick=async()=>{SETTINGS.autoPlay=!SETTINGS.autoPlay;await DB.put("kv","settings",SETTINGS);
       ab.classList.toggle("on",SETTINGS.autoPlay);ab.textContent=SETTINGS.autoPlay?'🔊':'🔇';
@@ -1122,7 +1147,7 @@ async function chooseMC(btn,item,correct,mode,selfUnknown){
   const pickedCorrect=picked===correct;
   paintMC(correct,btn);
   if(mode==="ja2en")speak(item.question,null);
-  if(mode==="cloze_mc")speak(item.example.replace(/_{2,}/,clozeAnswer(item)),null);
+  if(mode==="cloze_mc")speak(fillCloze(item),null);
   // 「わからない」申告時は、四択が合っていても不正解と同じ扱い（習熟度を下げる＋要復習）
   // ＝ 日本語を見て思い出しただけの単語が定着中以上に上がらないようにする
   const countsAsCorrect=pickedCorrect&&!selfUnknown;
@@ -1145,7 +1170,7 @@ async function checkTyped(inp,item,mode){
   inp.disabled=true;inp.classList.add(ok?"correct":"wrong");
   const b=$("#spellBtn");if(b)b.style.display="none";
   const h=$("#helpBtn");if(h)h.style.display="none";
-  if(mode==="cloze_type")speak(item.example.replace(/_{2,}/,clozeAnswer(item)),null);
+  if(mode==="cloze_type")speak(fillCloze(item),null);
   else speak(item.question,null);
   let msg;
   if(ok)msg="CORRECT";
@@ -1170,7 +1195,7 @@ function typedHelp(item,mode){
     const picked=decodeURIComponent(b.dataset.v);
     const right=picked===correct;
     paintMC(correct,b);
-    if(mode==="cloze_type")speak(item.example.replace(/_{2,}/,clozeAnswer(item)),null);
+    if(mode==="cloze_type")speak(fillCloze(item),null);
     else speak(item.question,null);
     await recordHelp(item);  // 習熟度は据え置き・復習対象
     finishAnswer(false,item,right?"ヒントで正解（復習対象になります）":"正解 → "+correct,true);
@@ -1207,16 +1232,18 @@ function finishAnswer(ok,item,msg,helpUsed,forceReview){
   let extra=item.note?`<span class="note">${esc(item.note)}</span>`:"";
   // 回答後に例文を表示（設定オン かつ 例文があるとき）。単語と例文をつなげて覚える助けに。
   if(SETTINGS.showExample!==false&&item.example){
-    const exEn=esc(item.example.replace(/_{2,}/,clozeAnswer(item)));
+    const exEn=esc(fillCloze(item));
     const exJa=item.exampleJa?`<span class="ex-ja">${esc(item.exampleJa)}</span>`:"";
     extra+=`<span class="fb-ex">${exEn}${exJa}</span>`;
   }
   if(ok&&overcomeFlash){msg="克服しました 🎉 "+msg;overcomeFlash=false;}
   fb.innerHTML=esc(msg)+extra;
   fb.className="fb show "+(ok?"ok":"no");
-  if(ok)s.score++;else s.wrong.push(item);
+  // 再チャレンジ対象は同じ単語を1回だけに（複数回間違えても重複させない）
+  const inWrong=()=>s.wrong.some(w=>wordKey(w)===wordKey(item));
+  if(ok)s.score++;else if(!inWrong())s.wrong.push(item);
   // 「わからない」申告やヒント正解は、正解でもセッションの再チャレンジ対象に含める
-  if(ok&&forceReview&&!s.wrong.includes(item))s.wrong.push(item);
+  if(ok&&forceReview&&!inWrong())s.wrong.push(item);
   const n=$("#next");n.classList.add("show");
   n.textContent=(s.idx+1>=s.total)?"結果を見る →":"NEXT →";
 }
@@ -1272,6 +1299,7 @@ function renderResult(){
    TABS
 ================================================================ */
 let currentTab="home";
+let suppressAutoSpeak=false;   // タブ復帰などで自動読み上げを一時的に抑止
 function switchTab(tab){
   stopTimer();
   currentTab=tab;
@@ -1279,9 +1307,12 @@ function switchTab(tab){
   document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active",b.dataset.tab===tab));
   if(tab==="study"){
     // 中断していた作業を自動再開（単語帳のめくり → 学習の問題 → なければ学習トップ）
-    if(flashSession)renderFlashCard();
+    // 復帰時は自動読み上げを抑止（音量増大・鳴り直し防止）
+    suppressAutoSpeak=true;
+    if(flashSession){if(flashSession)flashSession._spokenIdx=flashSession.idx;renderFlashCard();}
     else if(session)renderQ();
     else renderStudyRoot();
+    suppressAutoSpeak=false;
   }else{
     ({home:renderHome,myvocab:renderMyVocab,progress:renderProgress,settings:renderSettings})[tab]();
   }
@@ -1727,17 +1758,14 @@ function renderMyVocab(query){
     });
   };
   const sf=$("#mvSearch");
-  let t;
+  let t,composing=false;
+  sf.addEventListener("compositionstart",()=>{composing=true;});
+  sf.addEventListener("compositionend",()=>{composing=false;drawResults(sf.value);});
   sf.oninput=()=>{
+    if(composing)return;              // 日本語変換中は結果を更新しない（入力を妨げない）
     clearTimeout(t);
-    const val=sf.value;                       // 入力時点の値を捕捉
-    t=setTimeout(()=>{
-      const active=document.activeElement===sf;
-      const pos=sf.selectionStart;
-      drawResults(val);
-      // 結果差し替えでフォーカスが外れた場合に備えて戻す（iOSで入力が途切れないように）
-      if(active){sf.focus();try{sf.setSelectionRange(pos,pos);}catch(e){}}
-    },220);
+    const val=sf.value;
+    t=setTimeout(()=>drawResults(val),200);
   };
   drawResults(query||"");   // 初期表示
 }
@@ -1901,7 +1929,7 @@ function renderRegisterLoop(book,section,presetWord,backQuery){
       if(!qq||!aa){toast("単語と訳は必須です");return;}
       cat=cat||v("#rCustomPos");
       tag=v("#rTag");
-      const w={question:qq,answer:aa,category:cat||"",tag:tag||"",
+      const w={question:slashToSpace(qq),answer:aa,category:cat||"",tag:tag||"",
         note:v("#rN"),example:v("#rE"),exampleJa:v("#rEj")};
       await addWord(book,section,w);
       added.push(w);
@@ -2110,7 +2138,7 @@ function renderFlashCard(){
   const fs=flashSession,it=fs.cards[fs.idx];
   // 上＝英語（単語＋英語例文）, 下＝日本語（訳＋例文訳）
   const enText=esc(it.question), jaText=esc(it.answer);
-  const enEx=it.example?esc(it.example.replace(/_{2,}/,clozeAnswer(it))):"";
+  const enEx=it.example?esc(fillCloze(it)):"";
   const jaEx=it.exampleJa?esc(it.exampleJa):"";
   const checked=isChecked(it);
   const pos=posShort(it);
@@ -2600,9 +2628,9 @@ function renderEditorForm(idx,backQuery){
     ${F("選択肢2（任意）","fc2",it.choices[1]||"")}
     ${F("選択肢3（任意）","fc3",it.choices[2]||"")}
     ${F("解説（note・任意）","fn",it.note)}
-    ${F("例文（example・空所は ____）","fe",it.example,"He ____ his fear.")}
+    ${F("例文（example・空所は ____。複数可）","fe",it.example,"The officer ____ the suspect ____ stop.")}
     ${F("例文の訳（example_ja）","fej",it.exampleJa)}
-    ${F("空所の答え（example_answer・活用形）","fea",it.exampleAnswer,"overcame")}
+    ${F("空所の答え（example_answer・複数は / 区切り）","fea",it.exampleAnswer,"ordered / to")}
     <button class="btn primary" id="save">保存する</button>
     ${isNew?"":`<button class="btn danger" id="del">この問題を削除</button>`}`;
   $("#bk").onclick=()=>renderEditorList(backQuery);

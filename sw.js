@@ -1,4 +1,4 @@
-const CACHE = "vocab-v21";
+const CACHE = "vocab-v23";
 const ASSETS = [
   "./index.html",
   "./manifest.webmanifest",
