@@ -1,4 +1,4 @@
-const CACHE = "vocab-v27";
+const CACHE = "vocab-v28";
 const ASSETS = [
   "./index.html",
   "./manifest.webmanifest",
@@ -17,6 +17,7 @@ self.addEventListener("activate", e => {
 });
 self.addEventListener("fetch", e => {
   if (e.request.method !== "GET") return;
+  if (/texttospeech\.googleapis\.com/.test(e.request.url)) return;   // 音声APIはそのまま通信（キャッシュしない）
   e.respondWith(
     caches.match(e.request, { ignoreSearch: true }).then(hit => {
       if (hit) return hit;

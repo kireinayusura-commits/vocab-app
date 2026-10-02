@@ -274,6 +274,13 @@
     border-radius:99px;opacity:0;pointer-events:none;transition:.25s;z-index:99;white-space:nowrap;}
   .toast.show{opacity:1;transform:translateX(-50%);}
   .empty{color:var(--sub);font-size:13px;text-align:center;padding:28px 0;line-height:1.7;}
+  .cloud-status{color:var(--sub);font-size:12px;line-height:1.7;margin:10px 2px 6px;}
+  .cloud-status .bad{color:var(--red);}
+  .cloud-row{display:flex;justify-content:space-between;align-items:center;gap:10px;
+    color:var(--sub);font-size:12px;margin:14px 2px 4px;}
+  .link-btn{background:none;border:none;color:var(--gold);font-size:12px;font-family:'Noto Sans JP';
+    cursor:pointer;padding:6px 0;flex:none;text-decoration:underline;text-underline-offset:3px;}
+  .cloud-note{color:var(--sub);font-size:11px;line-height:1.6;margin:8px 2px 14px;}
   .reg-head{background:linear-gradient(180deg,#1d1c18,#15171c);border:1px solid var(--gold);
     border-radius:14px;padding:13px 15px;margin-bottom:18px;}
   .reg-dest{font-size:13px;color:var(--ink);}
@@ -526,11 +533,12 @@ const DEFAULT_CSV=`id,book,section,type,category,question,answer,choice1,choice2
 const DB={
   db:null,
   open(){return new Promise((res,rej)=>{
-    const r=indexedDB.open("vocab-app",1);
+    const r=indexedDB.open("vocab-app",2);
     r.onupgradeneeded=e=>{
       const d=e.target.result;
       if(!d.objectStoreNames.contains("kv"))d.createObjectStore("kv");
       if(!d.objectStoreNames.contains("progress"))d.createObjectStore("progress");
+      if(!d.objectStoreNames.contains("audio"))d.createObjectStore("audio");   // クラウド音声のキャッシュ
     };
     r.onsuccess=e=>{DB.db=e.target.result;res();};
     r.onerror=()=>rej(r.error);
@@ -540,6 +548,7 @@ const DB={
   put(store,key,val){return new Promise((res,rej)=>{const q=DB._tx(store,"readwrite").put(val,key);q.onsuccess=()=>res();q.onerror=()=>rej(q.error);});},
   del(store,key){return new Promise((res,rej)=>{const q=DB._tx(store,"readwrite").delete(key);q.onsuccess=()=>res();q.onerror=()=>rej(q.error);});},
   clear(store){return new Promise((res,rej)=>{const q=DB._tx(store,"readwrite").clear();q.onsuccess=()=>res();q.onerror=()=>rej(q.error);});},
+  count(store){return new Promise((res,rej)=>{const q=DB._tx(store,"readonly").count();q.onsuccess=()=>res(q.result);q.onerror=()=>rej(q.error);});},
   entries(store){return new Promise((res,rej)=>{
     const out=[];const q=DB._tx(store,"readonly").openCursor();
     q.onsuccess=e=>{const c=e.target.result;if(c){out.push([c.key,c.value]);c.continue();}else res(out);};
@@ -559,6 +568,9 @@ let SETTINGS={goalDate:"",autoPlay:true,goalScope:{books:[],cats:[]},speechRate:
   showPos:false,showExample:true,   // 四択での品詞表示 / 回答後の例文表示
   voiceURI:"",                       // 読み上げ音声の指定（空＝自動で高品質を選ぶ）
   showAllVoices:false,               // 効果音的な声も一覧に出す（切り分け用）
+  cloudTTS:false,                    // Google Cloud TTS（高品質音声）を使う
+  cloudKey:"",                       // Google Cloud の APIキー（端末内のみ保存・バックアップに含めない）
+  cloudVoice:"",                     // 使用する Google の声（例 en-US-Chirp3-HD-…）
   lastBook:"",lastSection:"",lastCategory:"",lastTag:""};   // 連続登録の引き継ぎ用
 let DAILY={};                     // "YYYY-MM-DD" -> {c,w,tumbles,overcome}
 const $=s=>document.querySelector(s);
@@ -893,14 +905,12 @@ if(synth){
   synth.onvoiceschanged=()=>{pickVoice();refreshVoiceUI();};
 }
 let _lastSpeak={text:"",at:0};
-function speak(text,btn){
-  if(!synth)return;
-  const clean=String(text).replace(/_{2,}/g," blank ").replace(/~/g," ").replace(/\s+/g," ").trim();
-  if(!clean)return;
-  const now=Date.now();
-  // 直前と同じ発話が短時間に重なると音が二重（大きく聞こえる）になるのを防ぐ
-  if(clean===_lastSpeak.text && now-_lastSpeak.at<400)return;
-  _lastSpeak={text:clean,at:now};
+function cleanSpeechText(text){
+  return String(text||"").replace(/_{2,}/g," blank ").replace(/~/g," ").replace(/\s+/g," ").trim();
+}
+// 端末の音声（予備）で読み上げる
+function deviceSpeak(clean,btn){
+  if(!synth||!clean)return;
   synth.cancel();   // 前の発話を必ず止める（重なり防止）
   const u=new SpeechSynthesisUtterance(clean);
   if(enVoice)u.voice=enVoice;
@@ -910,8 +920,162 @@ function speak(text,btn){
   if(btn){btn.classList.add("playing");u.onend=u.onerror=()=>btn.classList.remove("playing");}
   synth.speak(u);
 }
-// 画面遷移などで発話を完全に止める
-function stopSpeak(){if(synth){synth.cancel();}_lastSpeak={text:"",at:0};}
+function speak(text,btn){
+  const clean=cleanSpeechText(text);
+  if(!clean)return;
+  const now=Date.now();
+  // 直前と同じ発話が短時間に重なると音が二重（大きく聞こえる）になるのを防ぐ
+  if(clean===_lastSpeak.text && now-_lastSpeak.at<400)return;
+  _lastSpeak={text:clean,at:now};
+  if(cloudReady()){
+    if(synth)synth.cancel();
+    cloudSpeak(clean,btn).then(ok=>{if(!ok)deviceSpeak(clean,btn);});   // 失敗時は端末音声で読む
+    return;
+  }
+  deviceSpeak(clean,btn);
+}
+function stopSpeak(){
+  if(synth){synth.cancel();}
+  ttsPlayToken++;                       // 取得中のクラウド音声は再生しない
+  if(ttsAudio){try{ttsAudio.pause();}catch(e){}}
+  _lastSpeak={text:"",at:0};
+}
+
+/* ---------- 高品質音声（Google Cloud Text-to-Speech） ----------
+   初回だけ通信して音声を取得し、端末（IndexedDB "audio"）に保存。
+   2回目以降は保存した音声を通信なしで再生する。 */
+const TTS_API="https://texttospeech.googleapis.com/v1";
+let ttsAudio=null,ttsAudioUnlocked=false,ttsPlayToken=0,ttsBtn=null,ttsObjUrl=null;
+const ttsMem=new Map();                 // メモリ内キャッシュ（key→base64）
+let ttsLastErr={msg:"",at:0};
+function cloudReady(){return !!(SETTINGS.cloudTTS&&SETTINGS.cloudKey&&SETTINGS.cloudVoice);}
+function ttsCacheKey(text,voice){return (voice||SETTINGS.cloudVoice)+"|"+text;}
+function getTtsAudio(){
+  if(!ttsAudio){
+    ttsAudio=new Audio();
+    ttsAudio.preload="auto";
+    const done=()=>{if(ttsBtn){ttsBtn.classList.remove("playing");ttsBtn=null;}};
+    ttsAudio.addEventListener("ended",done);
+    ttsAudio.addEventListener("pause",done);
+    ttsAudio.addEventListener("error",done);
+  }
+  return ttsAudio;
+}
+// iOSは「ユーザー操作で一度再生した audio 要素」でないと後から自動再生できないため、最初のタップで無音を鳴らして解錠する
+function silentWavUrl(){
+  const n=400,buf=new ArrayBuffer(44+n*2),v=new DataView(buf);
+  const w=(o,str)=>{for(let i=0;i<str.length;i++)v.setUint8(o+i,str.charCodeAt(i));};
+  w(0,"RIFF");v.setUint32(4,36+n*2,true);w(8,"WAVE");w(12,"fmt ");v.setUint32(16,16,true);
+  v.setUint16(20,1,true);v.setUint16(22,1,true);v.setUint32(24,8000,true);v.setUint32(28,16000,true);
+  v.setUint16(32,2,true);v.setUint16(34,16,true);w(36,"data");v.setUint32(40,n*2,true);
+  return URL.createObjectURL(new Blob([buf],{type:"audio/wav"}));
+}
+function unlockTtsAudio(){
+  if(ttsAudioUnlocked||!SETTINGS.cloudTTS)return;
+  try{
+    const a=getTtsAudio();
+    a.src=silentWavUrl();
+    const p=a.play();
+    if(p&&p.then)p.then(()=>{a.pause();ttsAudioUnlocked=true;}).catch(()=>{});
+  }catch(e){}
+}
+document.addEventListener("touchend",unlockTtsAudio,{passive:true});
+document.addEventListener("click",unlockTtsAudio);
+function b64ToBlobUrl(b64){
+  const bin=atob(b64),arr=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);
+  return URL.createObjectURL(new Blob([arr],{type:"audio/mpeg"}));
+}
+// エラーを分かりやすい日本語に
+function ttsErrorText(status,msg){
+  msg=msg||"";
+  if(status===0)return "通信できません（オフライン）。保存済みの音声だけ再生できます";
+  if(/API key not valid|API_KEY_INVALID/i.test(msg))return "APIキーが正しくありません。設定で貼り付け直してください";
+  if(/billing/i.test(msg))return "Google Cloud の課金設定が有効になっていません";
+  if(/has not been used|is disabled|SERVICE_DISABLED/i.test(msg))return "Text-to-Speech API が有効になっていません（Google Cloud で有効化してください）";
+  if(/referer|referrer|blocked/i.test(msg))return "APIキーの制限でこのサイトからの利用がブロックされています（ウェブサイトの制限を確認）";
+  if(status===429)return "短時間に使いすぎました。少し待ってからもう一度お試しください";
+  if(status===400&&/voice/i.test(msg))return "選んだ声が使えません。声の一覧を読み込み直してください";
+  if(status===403)return "このAPIキーでは利用できません（API有効化・キーの制限・課金設定を確認）";
+  return `音声の取得に失敗しました（${status}）${msg?"："+msg.slice(0,80):""}`;
+}
+function ttsReportError(text){
+  const now=Date.now();
+  if(text===ttsLastErr.msg&&now-ttsLastErr.at<60000)return;   // 同じエラーを連発しない
+  ttsLastErr={msg:text,at:now};
+  toast(text);
+}
+async function ttsAddUsage(chars){
+  const m=todayStr().slice(0,7);
+  let u=null;try{u=await DB.get("kv","ttsUsage");}catch(e){}
+  if(!u||u.month!==m)u={month:m,chars:0};
+  u.chars+=chars;
+  try{await DB.put("kv","ttsUsage",u);}catch(e){}
+}
+async function ttsUsageThisMonth(){
+  let u=null;try{u=await DB.get("kv","ttsUsage");}catch(e){}
+  return (u&&u.month===todayStr().slice(0,7))?u.chars:0;
+}
+// Google から音声を取得（base64 の MP3 を返す）
+async function ttsFetch(text,voice,key){
+  voice=voice||SETTINGS.cloudVoice;key=key||SETTINGS.cloudKey;
+  const lang=voice.split("-").slice(0,2).join("-");
+  const ctl=typeof AbortController!=="undefined"?new AbortController():null;
+  const timer=ctl?setTimeout(()=>ctl.abort(),12000):null;
+  let res;
+  try{
+    res=await fetch(`${TTS_API}/text:synthesize?key=${encodeURIComponent(key)}`,{
+      method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({input:{text},voice:{languageCode:lang,name:voice},audioConfig:{audioEncoding:"MP3"}}),
+      signal:ctl?ctl.signal:undefined});
+  }catch(e){throw new Error(ttsErrorText(0));}
+  finally{if(timer)clearTimeout(timer);}
+  if(!res.ok){
+    let msg="";try{const j=await res.json();msg=(j.error&&j.error.message)||"";}catch(e){}
+    const err=new Error(ttsErrorText(res.status,msg));err.status=res.status;throw err;
+  }
+  const j=await res.json();
+  if(!j.audioContent)throw new Error("音声データが空でした");
+  await ttsAddUsage(text.length);
+  return j.audioContent;
+}
+// キャッシュ優先で音声を得る（メモリ → 端末保存 → 通信）
+async function ttsGet(text){
+  const k=ttsCacheKey(text);
+  if(ttsMem.has(k))return ttsMem.get(k);
+  let hit=null;try{hit=await DB.get("audio",k);}catch(e){}
+  if(!hit){
+    hit=await ttsFetch(text);
+    try{await DB.put("audio",k,hit);}catch(e){}
+  }
+  ttsMem.set(k,hit);
+  if(ttsMem.size>300)ttsMem.delete(ttsMem.keys().next().value);
+  return hit;
+}
+function ttsPrefetch(text){
+  if(!cloudReady())return;
+  const clean=cleanSpeechText(text);
+  if(clean)ttsGet(clean).catch(()=>{});
+}
+async function cloudSpeak(clean,btn){
+  const token=++ttsPlayToken;
+  let b64;
+  try{b64=await ttsGet(clean);}
+  catch(e){ttsReportError(e.message);return false;}
+  if(token!==ttsPlayToken)return true;          // 別の再生や停止が入った
+  const a=getTtsAudio();
+  try{a.pause();}catch(e){}
+  if(ttsObjUrl){URL.revokeObjectURL(ttsObjUrl);ttsObjUrl=null;}
+  ttsObjUrl=b64ToBlobUrl(b64);
+  a.src=ttsObjUrl;
+  const rate=SETTINGS.speechRate||0.92;
+  a.defaultPlaybackRate=rate;a.playbackRate=rate;a.volume=1;
+  if(ttsBtn&&ttsBtn!==btn)ttsBtn.classList.remove("playing");
+  ttsBtn=btn||null;
+  if(btn)btn.classList.add("playing");
+  try{await a.play();a.playbackRate=rate;return true;}
+  catch(e){if(btn)btn.classList.remove("playing");return false;}   // 自動再生が拒否された等 → 端末音声へ
+}
 
 /* ---------- quiz helpers ---------- */
 const TYPE_LABEL={word:"単語",idiom:"熟語",grammar:"文法",order:"並べ替え"};
@@ -1157,11 +1321,12 @@ function renderQ(){
     sp.onclick=()=>speak(speakWord,sp);
     // タブ切替でのタブ復帰時は自動読み上げしない（同じ問題が鳴り直す・音量が大きくなるのを防ぐ）
     if(SETTINGS.autoPlay&&!suppressAutoSpeak)setTimeout(()=>speak(speakWord,sp),350);
+    {const nx=session.queue[session.idx+1];if(nx)setTimeout(()=>ttsPrefetch(nx.question),1000);}
     suppressAutoSpeak=false;
     const ab=$("#autoBtn");
     if(ab)ab.onclick=async()=>{SETTINGS.autoPlay=!SETTINGS.autoPlay;await DB.put("kv","settings",SETTINGS);
       ab.classList.toggle("on",SETTINGS.autoPlay);ab.textContent=SETTINGS.autoPlay?'🔊':'🔇';
-      if(SETTINGS.autoPlay)speak(speakWord,sp);else synth&&synth.cancel();};
+      if(SETTINGS.autoPlay)speak(speakWord,sp);else stopSpeak();};
   }
 }
 
@@ -2221,6 +2386,8 @@ function renderFlashCard(){
     fs._spokenIdx=fs.idx;
     setTimeout(()=>{const sp=$("#fspeak");speak(it.question,sp);},300);
   }
+  // 次のカードの音声を先に用意しておく（めくった瞬間に鳴るように）
+  const nx=fs.cards[fs.idx+1];if(nx)setTimeout(()=>ttsPrefetch(nx.question),900);
 }
 // 左右スワイプ検出（onLeft=次へ, onRight=戻る）
 function attachSwipe(el,onLeft,onRight){
@@ -2423,6 +2590,160 @@ function renderProgress(){
     :`<div class="empty">${totalSeen?"苦手なセクションはありません。":"学習するとセクション別の分析が表示されます。"}</div>`}`;
 }
 
+/* ---------- 高品質音声（Google）の設定画面まわり ---------- */
+const TTS_TIERS=[
+  [/Chirp3-HD/i,"最高品質（Chirp 3 HD）"],
+  [/Chirp-HD/i,"高品質（Chirp HD）"],
+  [/Neural2/i,"高品質（Neural2）"],
+  [/Wavenet/i,"標準（WaveNet）"]];
+const TTS_REGION={"en-US":"米国","en-GB":"英国","en-AU":"豪州"};
+function ttsTierOf(name){const t=TTS_TIERS.findIndex(([re])=>re.test(name));return t;}
+function cloudVoiceShortName(name){
+  const m=name.match(/Chirp3?-HD-(.+)$/i);if(m)return m[1];
+  return name.split("-").slice(2).join("-");
+}
+function cloudVoiceLabel(v){
+  const g=v.gender==="FEMALE"?"女性":v.gender==="MALE"?"男性":"";
+  const r=TTS_REGION[v.lang]||v.lang;
+  return `${cloudVoiceShortName(v.name)}（${[g,r].filter(x=>x).join("・")}）`;
+}
+async function getCloudVoiceList(){let l=null;try{l=await DB.get("kv","cloudVoices");}catch(e){}return l||[];}
+async function rebuildCloudVoiceOptions(){
+  const sel=$("#cloudVoiceSel");if(!sel)return;
+  const list=await getCloudVoiceList();
+  if(!list.length){
+    sel.innerHTML=SETTINGS.cloudVoice?`<option value="${esc(SETTINGS.cloudVoice)}">${esc(SETTINGS.cloudVoice)}</option>`
+      :`<option value="">（先に声の一覧を読み込んでください）</option>`;
+    return;
+  }
+  sel.innerHTML=TTS_TIERS.map(([re,label],ti)=>{
+    const vs=list.filter(v=>ttsTierOf(v.name)===ti);
+    if(!vs.length)return "";
+    return `<optgroup label="${label}">${vs.map(v=>`<option value="${esc(v.name)}" ${v.name===SETTINGS.cloudVoice?"selected":""}>${esc(cloudVoiceLabel(v))}</option>`).join("")}</optgroup>`;
+  }).join("");
+}
+async function loadCloudVoiceList(){
+  const st=$("#cloudStatus");
+  if(!SETTINGS.cloudKey){if(st)st.innerHTML=`<span class="bad">APIキーを入力してください</span>`;return;}
+  if(st)st.textContent="声の一覧を読み込んでいます…";
+  let res;
+  try{res=await fetch(`${TTS_API}/voices?languageCode=en&key=${encodeURIComponent(SETTINGS.cloudKey)}`);}
+  catch(e){if(st)st.innerHTML=`<span class="bad">${esc(ttsErrorText(0))}</span>`;return;}
+  if(!res.ok){
+    let msg="";try{const j=await res.json();msg=(j.error&&j.error.message)||"";}catch(e){}
+    if(st)st.innerHTML=`<span class="bad">${esc(ttsErrorText(res.status,msg))}</span>`;return;
+  }
+  const j=await res.json();
+  const list=(j.voices||[]).map(v=>({name:v.name,lang:(v.languageCodes||[])[0]||"",gender:v.ssmlGender||""}))
+    .filter(v=>TTS_REGION[v.lang]&&ttsTierOf(v.name)>=0)
+    .sort((a,b)=>ttsTierOf(a.name)-ttsTierOf(b.name)||a.lang.localeCompare(b.lang)||a.name.localeCompare(b.name));
+  if(!list.length){if(st)st.innerHTML=`<span class="bad">使える英語の声が見つかりませんでした</span>`;return;}
+  await DB.put("kv","cloudVoices",list);
+  if(!list.some(v=>v.name===SETTINGS.cloudVoice)){
+    // 既定：米国英語の最高品質・女性の声
+    const pick=list.find(v=>v.lang==="en-US"&&/Chirp3-HD/i.test(v.name)&&v.gender==="FEMALE")||list.find(v=>v.lang==="en-US")||list[0];
+    SETTINGS.cloudVoice=pick.name;
+    await DB.put("kv","settings",SETTINGS);
+  }
+  await rebuildCloudVoiceOptions();
+  toast(`声の一覧を読み込みました（${list.length}種類）`);
+  refreshCloudStatus();refreshBulkInfo();refreshCacheInfo();
+}
+async function refreshCloudStatus(){
+  const st=$("#cloudStatus");if(!st)return;
+  if(!SETTINGS.cloudKey){st.textContent="APIキーを入力すると使えるようになります。";return;}
+  if(!SETTINGS.cloudVoice){st.textContent="「声の一覧を読み込む」を押してください（キーの確認も兼ねます）。";return;}
+  const list=await getCloudVoiceList();
+  const v=list.find(x=>x.name===SETTINGS.cloudVoice);
+  const used=await ttsUsageThisMonth();
+  if(!$("#cloudStatus"))return;
+  st.innerHTML=`使用中の声：${esc(v?cloudVoiceLabel(v):SETTINGS.cloudVoice)}<br>今月の送信：${used.toLocaleString()} 文字（Google の無料枠の目安：高品質の声で月100万文字）`;
+}
+async function cloudTryVoice(btn){
+  const st=$("#cloudStatus");
+  if(!SETTINGS.cloudKey||!SETTINGS.cloudVoice){toast("先にAPIキーと声を設定してください");return;}
+  stopSpeak();
+  const ok=await cloudSpeak("Practice makes perfect. Let's learn some new words today.",btn);
+  if(!ok&&st)st.innerHTML=`<span class="bad">${esc(ttsLastErr.msg||"再生できませんでした")}</span>`;
+  else refreshCloudStatus();
+}
+// 教材から「読み上げる文」を集める（単語・例文・並べ替えの答え）
+function ttsTextsFor(book){
+  const items=book?QUESTIONS.filter(d=>d.book===book):QUESTIONS;
+  const set=new Set();
+  for(const it of items){
+    const add=t=>{const c=cleanSpeechText(t);if(c)set.add(c);};
+    add(it.question);
+    if(it.example)add(fillCloze(it));
+    if(it.type==="order")add(it.answer);
+  }
+  return [...set];
+}
+async function ttsMissing(texts){
+  const out=[];
+  for(const t of texts){let hit=null;try{hit=await DB.get("audio",ttsCacheKey(t));}catch(e){}if(!hit)out.push(t);}
+  return out;
+}
+let ttsBulk={running:false,abort:false,done:0,total:0,book:""};
+let _bulkInfoSeq=0;
+async function refreshBulkInfo(){
+  const box=$("#bulkInfo");if(!box||ttsBulk.running)return;
+  if(!SETTINGS.cloudVoice){box.textContent="";return;}
+  const seq=++_bulkInfoSeq;
+  const book=($("#bulkBook")||{}).value||"";
+  const miss=await ttsMissing(ttsTextsFor(book));
+  if(seq!==_bulkInfoSeq||!$("#bulkInfo"))return;
+  const chars=miss.reduce((a,t)=>a+t.length,0);
+  box.textContent=miss.length?`未作成 ${miss.length} 件（約 ${chars.toLocaleString()} 文字）。作成しておくと、通信がなくても高品質の声で再生できます。`
+    :"この範囲の音声はすべて作成済みです。";
+}
+async function refreshCacheInfo(){
+  const el=$("#cacheInfo");if(!el)return;
+  let n=0;try{n=await DB.count("audio");}catch(e){}
+  let mb="";
+  try{if(navigator.storage&&navigator.storage.estimate){const e=await navigator.storage.estimate();mb=`／アプリ全体で約 ${(e.usage/1048576).toFixed(1)} MB`;}}catch(e){}
+  if($("#cacheInfo"))el.textContent=`保存済みの音声 ${n} 件${mb}`;
+}
+function paintBulk(){
+  const tr=$("#bulkTrack"),bar=$("#bulkBar"),btn=$("#bulkStart"),info=$("#bulkInfo");
+  if(!btn)return;
+  if(ttsBulk.running){
+    tr.style.display="";bar.style.width=(ttsBulk.total?ttsBulk.done/ttsBulk.total*100:0)+"%";
+    btn.textContent="中止する";btn.classList.remove("primary");btn.classList.add("ghost");
+    info.textContent=`作成中 ${ttsBulk.done} / ${ttsBulk.total}（画面を離れても続きます）`;
+  }else{
+    tr.style.display="none";btn.textContent="作成を始める";btn.classList.add("primary");btn.classList.remove("ghost");
+  }
+}
+async function runTtsBulk(book){
+  if(!SETTINGS.cloudKey||!SETTINGS.cloudVoice){toast("先にAPIキーと声を設定してください");return;}
+  const miss=await ttsMissing(ttsTextsFor(book));
+  if(!miss.length){toast("この範囲の音声はすべて作成済みです");refreshBulkInfo();return;}
+  const chars=miss.reduce((a,t)=>a+t.length,0);
+  if(!confirm(`${book||"すべての教材"}の音声 ${miss.length} 件（約 ${chars.toLocaleString()} 文字）を Google から取得して保存します。よろしいですか？`))return;
+  ttsBulk={running:true,abort:false,done:0,total:miss.length,book};
+  paintBulk();
+  let failed=0,stopMsg="";
+  for(const t of miss){
+    if(ttsBulk.abort){stopMsg="中止しました";break;}
+    try{
+      const b64=await ttsFetch(t);
+      try{await DB.put("audio",ttsCacheKey(t),b64);}catch(e){}
+    }catch(e){
+      failed++;
+      if(e.status===400||e.status===403||/通信できません/.test(e.message)){stopMsg=e.message;break;}   // 続けても失敗する種類
+    }
+    ttsBulk.done++;
+    paintBulk();
+    await new Promise(r=>setTimeout(r,120));
+  }
+  const made=ttsBulk.done-failed;
+  ttsBulk.running=false;
+  paintBulk();
+  toast(stopMsg?`${stopMsg}（${made} 件作成）`:`音声を ${made} 件作成しました${failed?`（${failed} 件は失敗）`:""}`);
+  refreshBulkInfo();refreshCacheInfo();refreshCloudStatus();
+}
+
 /* ---------- SETTINGS ---------- */
 function renderSettings(){
   screen.innerHTML=`
@@ -2453,7 +2774,32 @@ function renderSettings(){
       <div class="t-sub">答え合わせのあと、例文があれば表示。単語と例文をつなげて覚える</div></div>
       <button class="switch ${SETTINGS.showExample!==false?'on':''}" id="exSwitch"></button>
     </div>
-    <div class="field"><label>読み上げ音声</label>
+    <div class="divider"><span>Voice</span></div>
+    <div class="toggle-row">
+      <div class="t-main"><div class="t-title">高品質音声（Google）を使う</div>
+      <div class="t-sub">ネイティブに近い自然な発音で読み上げます。初回だけ通信し、音声は端末に保存して次から通信なしで再生します</div></div>
+      <button class="switch ${SETTINGS.cloudTTS?'on':''}" id="cloudSwitch"></button>
+    </div>
+    <div id="cloudBox" style="${SETTINGS.cloudTTS?'':'display:none'}">
+      <div class="field"><label>APIキー</label>
+        <input id="cloudKey" type="password" value="${esc(SETTINGS.cloudKey||"")}" placeholder="AIza で始まるキーを貼り付け"
+          autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"></div>
+      <button class="btn ghost" id="cloudLoad">声の一覧を読み込む</button>
+      <div class="field" style="margin-top:12px"><label>声</label>
+        <select id="cloudVoiceSel" class="search" style="width:100%"></select></div>
+      <button class="btn ghost" id="cloudTest">この声で試聴</button>
+      <div id="cloudStatus" class="cloud-status"></div>
+      <div class="field" style="margin-top:16px"><label>音声をまとめて作成（通信できるときに）</label>
+        <select id="bulkBook" class="search" style="width:100%">
+          <option value="">すべての教材</option>${booksList().map(b=>`<option value="${esc(b)}">${esc(b)}</option>`).join("")}
+        </select></div>
+      <div id="bulkInfo" class="cloud-status"></div>
+      <div class="track" id="bulkTrack" style="display:none;margin:10px 0"><div id="bulkBar" style="width:0%"></div></div>
+      <button class="btn primary" id="bulkStart">作成を始める</button>
+      <div class="cloud-row"><span id="cacheInfo"></span><button class="link-btn" id="cacheClear">保存した音声を削除</button></div>
+      <p class="cloud-note">APIキーはこの端末だけに保存され、学習記録のバックアップには含まれません。設定方法は SETUP.md の「高品質音声の設定」を参照してください。</p>
+    </div>
+    <div class="field"><label>端末の音声（Google が使えないときの予備）</label>
       <select id="voiceSel" class="search" style="width:100%"></select>
       <button class="btn ghost" id="voiceTest" style="margin-top:9px">選んだ声で試聴</button>
     </div>
@@ -2548,6 +2894,47 @@ function renderSettings(){
   };
   // iOSで一覧が遅れて揃うケースに備え、開いた直後にもう一度取り直す
   if(synth){setTimeout(()=>{try{synth.getVoices();rebuildVoiceOptions();}catch(e){}},400);}
+  // ---- 高品質音声（Google） ----
+  rebuildCloudVoiceOptions();refreshCloudStatus();refreshBulkInfo();refreshCacheInfo();
+  $("#cloudSwitch").onclick=async e=>{
+    SETTINGS.cloudTTS=!SETTINGS.cloudTTS;
+    await DB.put("kv","settings",SETTINGS);
+    e.currentTarget.classList.toggle("on",SETTINGS.cloudTTS);
+    $("#cloudBox").style.display=SETTINGS.cloudTTS?"":"none";
+    if(SETTINGS.cloudTTS)unlockTtsAudio();       // このタップで再生を解錠しておく
+    refreshCloudStatus();
+  };
+  const ck=$("#cloudKey");
+  ck.onchange=async()=>{
+    SETTINGS.cloudKey=ck.value.trim();
+    await DB.put("kv","settings",SETTINGS);
+    refreshCloudStatus();
+    if(SETTINGS.cloudKey&&!(await getCloudVoiceList()).length)loadCloudVoiceList();   // 初回は一覧も自動で読み込む
+  };
+  $("#cloudLoad").onclick=()=>{
+    SETTINGS.cloudKey=ck.value.trim();
+    DB.put("kv","settings",SETTINGS);
+    loadCloudVoiceList();
+  };
+  $("#cloudVoiceSel").onchange=async e=>{
+    SETTINGS.cloudVoice=e.target.value;
+    await DB.put("kv","settings",SETTINGS);
+    refreshCloudStatus();refreshBulkInfo();refreshCacheInfo();
+    cloudTryVoice($("#cloudTest"));
+  };
+  $("#cloudTest").onclick=e=>cloudTryVoice(e.currentTarget);
+  $("#bulkBook").onchange=()=>refreshBulkInfo();
+  $("#bulkStart").onclick=()=>{
+    if(ttsBulk.running){ttsBulk.abort=true;return;}
+    runTtsBulk($("#bulkBook").value);
+  };
+  $("#cacheClear").onclick=async()=>{
+    if(!confirm("端末に保存した音声をすべて削除します。次に再生するときに、また通信して取得します。"))return;
+    try{await DB.clear("audio");}catch(e){}
+    ttsMem.clear();toast("保存した音声を削除しました");
+    refreshCacheInfo();refreshBulkInfo();
+  };
+  if(ttsBulk.running)paintBulk();
   $("#rate").oninput=async e=>{SETTINGS.speechRate=+e.target.value;
     e.target.previousElementSibling.textContent=`読み上げ速度（${SETTINGS.speechRate.toFixed(2)}）`;
     await DB.put("kv","settings",SETTINGS);};
@@ -2567,7 +2954,7 @@ function renderSettings(){
   $("#bkup").onclick=async()=>{
     const backup={
       _format:"vocab-backup",_version:1,_exportedAt:new Date().toISOString(),
-      settings:SETTINGS,daily:DAILY,mylists:MYLISTS,flash:FLASH,check:CHECK,
+      settings:{...SETTINGS,cloudKey:""},daily:DAILY,mylists:MYLISTS,flash:FLASH,check:CHECK,   // APIキーは書き出さない
       progress:Object.fromEntries(PROG)
     };
     const blob=new Blob([JSON.stringify(backup,null,2)],{type:"application/json"});
@@ -2789,7 +3176,7 @@ $("#restoreInput").addEventListener("change",e=>{
         toast("このファイルは学習記録のバックアップではありません");return;}
       if(!confirm("現在の学習記録をこのバックアップで置き換えます。よろしいですか？"))return;
       // restore settings & daily
-      if(data.settings)SETTINGS={...SETTINGS,...data.settings};
+      if(data.settings){const keep=SETTINGS.cloudKey;SETTINGS={...SETTINGS,...data.settings};if(!SETTINGS.cloudKey)SETTINGS.cloudKey=keep;}   // この端末のAPIキーは保持
       DAILY=data.daily||{};
       if(data.mylists)MYLISTS=data.mylists;
       if(data.flash)FLASH=data.flash;
