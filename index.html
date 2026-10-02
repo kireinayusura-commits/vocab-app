@@ -2852,12 +2852,20 @@ function renderSettings(){
 
   $("#goalDate").onchange=async e=>{SETTINGS.goalDate=e.target.value;await DB.put("kv","settings",SETTINGS);toast("目標日を保存しました");};
   $("#goalScope").onclick=renderGoalScope;
-  $("#apSwitch").onclick=async e=>{SETTINGS.autoPlay=!SETTINGS.autoPlay;await DB.put("kv","settings",SETTINGS);
-    e.currentTarget.classList.toggle("on",SETTINGS.autoPlay);};
-  $("#posSwitch").onclick=async e=>{SETTINGS.showPos=!SETTINGS.showPos;await DB.put("kv","settings",SETTINGS);
-    e.currentTarget.classList.toggle("on",SETTINGS.showPos);};
-  $("#exSwitch").onclick=async e=>{SETTINGS.showExample=!(SETTINGS.showExample!==false);await DB.put("kv","settings",SETTINGS);
-    e.currentTarget.classList.toggle("on",SETTINGS.showExample!==false);};
+  // スイッチ共通：押したらすぐ見た目を切り替え、保存はそのあと。
+  // （await のあとでは e.currentTarget が消えるため、要素は変数で持つ）
+  const bindSwitch=(id,flip,after)=>{
+    const el=$(id);if(!el)return;
+    el.onclick=()=>{
+      const on=flip();
+      el.classList.toggle("on",on);
+      if(after)after(on);
+      DB.put("kv","settings",SETTINGS).catch(()=>toast("設定を保存できませんでした"));
+    };
+  };
+  bindSwitch("#apSwitch",()=>(SETTINGS.autoPlay=!SETTINGS.autoPlay));
+  bindSwitch("#posSwitch",()=>(SETTINGS.showPos=!SETTINGS.showPos));
+  bindSwitch("#exSwitch",()=>(SETTINGS.showExample=!(SETTINGS.showExample!==false)));
   // 音声の選択肢を（再）構築。音声一覧が遅れて揃っても呼び直せるよう関数化。
   rebuildVoiceOptions=()=>{
     const sel=$("#voiceSel");if(!sel)return;
@@ -2885,25 +2893,16 @@ function renderSettings(){
   };
   const vtest=$("#voiceTest");
   if(vtest)vtest.onclick=()=>speak("This is the selected voice.",null);
-  const allVsw=$("#allVoiceSwitch");
-  if(allVsw)allVsw.onclick=async e=>{
-    SETTINGS.showAllVoices=!SETTINGS.showAllVoices;
-    await DB.put("kv","settings",SETTINGS);
-    e.currentTarget.classList.toggle("on",SETTINGS.showAllVoices);
-    rebuildVoiceOptions();
-  };
+  bindSwitch("#allVoiceSwitch",()=>(SETTINGS.showAllVoices=!SETTINGS.showAllVoices),()=>rebuildVoiceOptions());
   // iOSで一覧が遅れて揃うケースに備え、開いた直後にもう一度取り直す
   if(synth){setTimeout(()=>{try{synth.getVoices();rebuildVoiceOptions();}catch(e){}},400);}
   // ---- 高品質音声（Google） ----
   rebuildCloudVoiceOptions();refreshCloudStatus();refreshBulkInfo();refreshCacheInfo();
-  $("#cloudSwitch").onclick=async e=>{
-    SETTINGS.cloudTTS=!SETTINGS.cloudTTS;
-    await DB.put("kv","settings",SETTINGS);
-    e.currentTarget.classList.toggle("on",SETTINGS.cloudTTS);
-    $("#cloudBox").style.display=SETTINGS.cloudTTS?"":"none";
-    if(SETTINGS.cloudTTS)unlockTtsAudio();       // このタップで再生を解錠しておく
+  bindSwitch("#cloudSwitch",()=>(SETTINGS.cloudTTS=!SETTINGS.cloudTTS),on=>{
+    $("#cloudBox").style.display=on?"":"none";
+    if(on)unlockTtsAudio();       // タップの直後に呼ぶことで、iPhoneで再生を許可させる
     refreshCloudStatus();
-  };
+  });
   const ck=$("#cloudKey");
   ck.onchange=async()=>{
     SETTINGS.cloudKey=ck.value.trim();
