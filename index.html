@@ -557,6 +557,7 @@ let QUESTIONS=[];                 // flattened view: すべての教材の単語
 let PROG=new Map();               // wordKey -> progress record
 let SETTINGS={goalDate:"",autoPlay:true,goalScope:{books:[],cats:[]},speechRate:0.92,timed:false,timeSec:8,
   showPos:false,showExample:true,   // 四択での品詞表示 / 回答後の例文表示
+  voiceURI:"",                       // 読み上げ音声の指定（空＝自動で高品質を選ぶ）
   lastBook:"",lastSection:"",lastCategory:"",lastTag:""};   // 連続登録の引き継ぎ用
 let DAILY={};                     // "YYYY-MM-DD" -> {c,w,tumbles,overcome}
 const $=s=>document.querySelector(s);
@@ -845,21 +846,30 @@ function needsReviewCount(items){return needsReviewItems(items).length;}
 /* ---------- speech ---------- */
 const synth=window.speechSynthesis;
 let enVoice=null;
+function englishVoices(){
+  if(!synth)return [];
+  return synth.getVoices().filter(v=>/^en(-|_|$)/i.test(v.lang));
+}
+function voiceScore(v){
+  let s=0;const n=v.name||"";
+  if(/siri/i.test(n))s+=6;
+  if(/enhanced|premium|neural/i.test(n))s+=5;
+  if(/Samantha|Ava|Allison|Serena|Daniel|Karen|Moira/i.test(n))s+=3;
+  if(/Google US English/i.test(n))s+=2;
+  if(/en-US/i.test(v.lang))s+=1;
+  if(v.localService)s+=1;          // 端末内＝オフラインで安定
+  return s;
+}
 function pickVoice(){
   if(!synth)return;
-  const vs=synth.getVoices().filter(v=>/^en(-|_|$)/i.test(v.lang));
-  // 高品質な声を優先（iOSのSiri/Enhanced、各社の高品質音声）
-  const score=v=>{
-    let s=0;const n=v.name||"";
-    if(/siri/i.test(n))s+=6;
-    if(/enhanced|premium|neural/i.test(n))s+=5;
-    if(/Samantha|Ava|Allison|Serena|Daniel|Karen|Moira/i.test(n))s+=3;
-    if(/Google US English/i.test(n))s+=2;
-    if(/en-US/i.test(v.lang))s+=1;
-    if(v.localService)s+=1;          // 端末内＝オフラインで安定
-    return s;
-  };
-  enVoice=vs.slice().sort((a,b)=>score(b)-score(a))[0]||null;
+  const vs=englishVoices();
+  // 保存された音声の指定があれば優先
+  if(SETTINGS.voiceURI){
+    const saved=vs.find(v=>v.voiceURI===SETTINGS.voiceURI);
+    if(saved){enVoice=saved;return;}
+  }
+  // 指定なし（自動）：高品質な声を優先
+  enVoice=vs.slice().sort((a,b)=>voiceScore(b)-voiceScore(a))[0]||null;
 }
 if(synth){pickVoice();synth.onvoiceschanged=pickVoice;}
 let _lastSpeak={text:"",at:0};
@@ -2423,9 +2433,16 @@ function renderSettings(){
       <div class="t-sub">答え合わせのあと、例文があれば表示。単語と例文をつなげて覚える</div></div>
       <button class="switch ${SETTINGS.showExample!==false?'on':''}" id="exSwitch"></button>
     </div>
+    <div class="field"><label>読み上げ音声</label>
+      <select id="voiceSel" class="search" style="width:100%">
+        <option value="">自動（高品質を優先）</option>
+        ${englishVoices().map(v=>`<option value="${esc(v.voiceURI)}" ${SETTINGS.voiceURI===v.voiceURI?"selected":""}>${esc(v.name)}${/en-GB/i.test(v.lang)?"（英）":/en-US/i.test(v.lang)?"（米）":""}${v.localService?"":" ·要通信"}</option>`).join("")}
+      </select>
+      <button class="btn ghost" id="voiceTest" style="margin-top:9px">選んだ声で試聴</button>
+    </div>
+    <p style="color:var(--sub);font-size:11px;line-height:1.6;margin:-4px 2px 12px">声の一覧は端末内蔵の音声です。少ない場合は、iPhoneの設定→アクセシビリティ→読み上げコンテンツ→声→英語 でAvaやSiri相当などの高品質音声を追加すると、ここに現れてより自然になります。</p>
     <div class="field"><label>読み上げ速度（${(SETTINGS.speechRate||0.92).toFixed(2)}）</label>
       <input type="range" id="rate" min="0.6" max="1.2" step="0.02" value="${SETTINGS.speechRate||0.92}" style="width:100%"></div>
-    <p style="color:var(--sub);font-size:11px;line-height:1.6;margin:-4px 2px 12px">声の質は端末内蔵の音声によります。iPhoneの設定→アクセシビリティ→読み上げコンテンツ→声 で高品質な英語音声を追加すると、より自然になります。</p>
     <div class="toggle-row">
       <div class="t-main"><div class="t-title">制限時間モード</div>
       <div class="t-sub">考える時間を区切ってテンポよく。時間切れは不正解にせず要復習に</div></div>
@@ -2472,6 +2489,15 @@ function renderSettings(){
     e.currentTarget.classList.toggle("on",SETTINGS.showPos);};
   $("#exSwitch").onclick=async e=>{SETTINGS.showExample=!(SETTINGS.showExample!==false);await DB.put("kv","settings",SETTINGS);
     e.currentTarget.classList.toggle("on",SETTINGS.showExample!==false);};
+  const vsel=$("#voiceSel");
+  if(vsel)vsel.onchange=async e=>{
+    SETTINGS.voiceURI=e.target.value;
+    await DB.put("kv","settings",SETTINGS);
+    pickVoice();                       // 選択を即反映
+    speak("This is the selected voice.",null);
+  };
+  const vtest=$("#voiceTest");
+  if(vtest)vtest.onclick=()=>speak("This is the selected voice.",null);
   $("#rate").oninput=async e=>{SETTINGS.speechRate=+e.target.value;
     e.target.previousElementSibling.textContent=`読み上げ速度（${SETTINGS.speechRate.toFixed(2)}）`;
     await DB.put("kv","settings",SETTINGS);};
