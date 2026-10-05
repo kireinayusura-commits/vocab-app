@@ -310,6 +310,15 @@
   .flash-speak{position:absolute;top:10px;left:12px;width:38px;height:38px;border-radius:50%;z-index:2;
     background:var(--panel-2);border:1px solid var(--line);color:var(--sub);display:flex;align-items:center;justify-content:center;cursor:pointer;}
   .flash-speak svg{width:17px;height:17px;}
+  /* 例文の末尾に置く小さなスピーカー（押しやすいよう当たり判定は広め） */
+  .ex-speak{display:inline-flex;align-items:center;justify-content:center;vertical-align:middle;
+    width:30px;height:30px;margin:-4px 0 -4px 6px;border-radius:50%;border:1px solid var(--line);
+    background:var(--panel-2);color:var(--gold);cursor:pointer;padding:0;position:relative;}
+  .ex-speak::after{content:"";position:absolute;inset:-8px;}   /* 見た目より広くタップできる */
+  .ex-speak svg{width:14px;height:14px;}
+  .ex-speak.playing{border-color:var(--gold);}
+  .row-edit{flex:none;background:none;border:1px solid var(--line);border-radius:9px;color:var(--sub);
+    font-family:'Noto Sans JP';font-size:12px;padding:7px 11px;cursor:pointer;}
   .flash-actions{display:flex;gap:11px;margin-top:16px;}
   .flash-actions button{flex:1;border:none;cursor:pointer;font-family:'Noto Sans JP';font-weight:700;
     font-size:15px;padding:16px;border-radius:14px;}
@@ -1943,14 +1952,24 @@ function renderMyVocab(query){
       ${found.length?`<div class="list">${found.map(d=>{
         const bi=LIBRARY.findIndex(b=>b.name===d.book);
         const wi=bi>=0?LIBRARY[bi].items.indexOf(d):-1;
-        return `<button class="row" data-b="${bi}" data-w="${wi}">
+        return `<div class="row" role="button" data-b="${bi}" data-w="${wi}">
           <div class="row-main"><div class="row-title">${esc(d.question)}</div>
-          <div class="row-sub">${esc(d.answer)}</div></div></button>`;}).join("")}</div>`
+          <div class="row-sub">${esc(d.answer)}</div></div>
+          <button class="row-edit" data-eb="${bi}" data-ew="${wi}">編集</button></div>`;}).join("")}</div>`
       :`<div class="empty">見つかりませんでした。</div>`}
       <button class="btn primary" id="mvAddThis" style="margin-top:14px">「${esc(qs)}」を登録する</button>`;
     const at=$("#mvAddThis");if(at)at.onclick=()=>renderRegisterSetup(qs,qs);
+    // 行をタップ → その単語を単語帳カードで開く（1枚）。終了で検索に戻る
     box.querySelectorAll(".row[data-b]").forEach(r=>r.onclick=()=>{
       const bi=+r.dataset.b,wi=+r.dataset.w;
+      if(bi<0||wi<0)return;
+      const w=LIBRARY[bi].items[wi];
+      startFlash([w],`${w.book}`,"en2ja",()=>renderMyVocab(curQuery));
+    });
+    // 「編集」ボタン → 編集画面（行のタップとは別扱い）
+    box.querySelectorAll(".row-edit").forEach(b=>b.onclick=e=>{
+      e.stopPropagation();
+      const bi=+b.dataset.eb,wi=+b.dataset.ew;
       if(bi>=0&&wi>=0)renderWordEdit(bi,wi,()=>renderMyVocab(curQuery));
     });
   };
@@ -2341,7 +2360,7 @@ function renderFlashCard(){
   const pos=posShort(it);
   const posTag=pos?`<span class="pos-badge">${esc(pos)}</span>`:"";
   const topInner=fs.showEn
-    ? `<div class="fc-en">${enText}${posTag}</div>${enEx?`<div class="fc-ex">${enEx}</div>`:""}`
+    ? `<div class="fc-en">${enText}${posTag}</div>${enEx?`<div class="fc-ex">${enEx}<button class="ex-speak" id="exSpeak" aria-label="例文を読み上げ"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/></svg></button></div>`:""}`
     : `<div class="fc-tap">英語を表示（タップ）</div>`;
   const botInner=fs.showJa
     ? `<div class="fc-ja">${jaText}</div>${jaEx?`<div class="fc-ex">${jaEx}</div>`:""}`
@@ -2363,11 +2382,13 @@ function renderFlashCard(){
         <div class="fc-line"></div>
         <div class="fc-half fc-bottom" id="botHalf">${botInner}</div>
       </div>
-      <div class="fc-swipehint">← スワイプでめくる →${fs.idx+1>=fs.cards.length?"（最後のカード）":""}</div>
+      <div class="fc-swipehint">${fs.cards.length===1?"上下をタップで隠す・表示":`← スワイプでめくる →${fs.idx+1>=fs.cards.length?"（最後のカード）":""}`}</div>
     </div>`;
   window.scrollTo(0,0);
   $("#bk").onclick=()=>{flashSession=null;(fs.backFn||renderFlashBooks)();};
   $("#fspeak").onclick=e=>{e.stopPropagation();speak(it.question,$("#fspeak"));};
+  const exs=$("#exSpeak");
+  if(exs)exs.onclick=e=>{e.stopPropagation();speak(fillCloze(it),exs);};   // 例文を読む（英語側は隠さない）
   $("#topHalf").onclick=()=>{fs.showEn=!fs.showEn;renderFlashCard();};
   $("#botHalf").onclick=()=>{fs.showJa=!fs.showJa;renderFlashCard();};
   $("#checkBtn").onclick=async()=>{await toggleCheck(it);renderFlashCard();};
@@ -2380,7 +2401,7 @@ function renderFlashCard(){
     fs.idx--;fs.showEn=true;fs.showJa=false;renderFlashCard();
   };
   // 左右スワイプ：カード＋下部ヒント周辺の広い範囲で有効（ボタンは廃止しスワイプに一本化）
-  attachSwipe($("#swipeZone"),goNext,goPrev);
+  if(fs.cards.length>1)attachSwipe($("#swipeZone"),goNext,goPrev);   // 1枚だけのときはめくらない
   // カードが切り替わったときだけ1回自動読み上げ（タップ再描画では鳴らさない）
   if(SETTINGS.autoPlay!==false && fs._spokenIdx!==fs.idx){
     fs._spokenIdx=fs.idx;
@@ -2388,6 +2409,7 @@ function renderFlashCard(){
   }
   // 次のカードの音声を先に用意しておく（めくった瞬間に鳴るように）
   const nx=fs.cards[fs.idx+1];if(nx)setTimeout(()=>ttsPrefetch(nx.question),900);
+  if(it.example)setTimeout(()=>ttsPrefetch(fillCloze(it)),1300);   // 例文ボタンを押したらすぐ鳴るように
 }
 // 左右スワイプ検出（onLeft=次へ, onRight=戻る）
 function attachSwipe(el,onLeft,onRight){
