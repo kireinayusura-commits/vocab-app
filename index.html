@@ -125,6 +125,18 @@
   .mbar{display:flex;height:10px;border-radius:99px;overflow:hidden;background:var(--panel-2);margin:12px 0 8px;}
   .mbar>div{height:100%;}
   .mlegend{display:flex;flex-wrap:wrap;gap:10px 16px;font-size:11px;color:var(--sub);}
+  .pct-tag{font-family:'Archivo';font-size:13px;font-weight:800;flex:none;}
+  .pct-tag.big{font-size:20px;}
+  .book-total{margin-bottom:14px;}
+  .list-head{display:flex;align-items:center;gap:12px;margin:22px 0 12px;}
+  .reorder-note{color:var(--sub);font-size:12px;line-height:1.6;margin:-4px 2px 10px;}
+  .reorder-row{cursor:default;}
+  .reorder-row:active{transform:none;}
+  .reorder-btns{display:flex;gap:8px;flex:none;}
+  .mv-btn{width:44px;height:44px;border-radius:12px;border:1px solid var(--line);background:var(--panel-2);
+    color:var(--ink);font-size:18px;font-weight:700;cursor:pointer;}
+  .mv-btn:disabled{opacity:.25;cursor:default;}
+  .mv-btn:not(:disabled):active{border-color:var(--gold);color:var(--gold);}
   .mlegend .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;}
 
   .stat-row{display:flex;border:1px solid var(--line);border-radius:14px;overflow:hidden;margin-bottom:14px;}
@@ -1508,6 +1520,7 @@ let currentTab="home";
 let suppressAutoSpeak=false;   // タブ復帰などで自動読み上げを一時的に抑止
 function switchTab(tab){
   stopTimer();
+  studyReorder=false;   // タブを移ったら並べ替えモードは終える
   currentTab=tab;
   stopSpeak();
   document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active",b.dataset.tab===tab));
@@ -1609,9 +1622,43 @@ function sectionsOf(b){
 function categoriesOf(b,s){return uniq(QUESTIONS.filter(d=>d.book===b&&d.section===s).map(d=>d.category));}
 function itemsOf(b,s,c){return QUESTIONS.filter(d=>(b==null||d.book===b)&&(s==null||d.section===s)&&(c==null||d.category===c));}
 
+let studyReorder=false;   // 学習メニューの教材を並べ替え中か
+async function moveBook(i,d){
+  const j=i+d;
+  if(j<0||j>=LIBRARY.length)return;
+  [LIBRARY[i],LIBRARY[j]]=[LIBRARY[j],LIBRARY[i]];
+  await syncLibrary();      // 並び順は保存され、教材が並ぶほかの画面にも反映される
+}
+function masteryBarHTML(counts,style){
+  return `<div class="mbar"${style?` style="${style}"`:""}>${counts.map((n,i)=>`<div style="flex:${Math.max(n,0.001)};background:${BAR_COLORS[i]}"></div>`).join("")}</div>`;
+}
+function pctColorOf(pct){return pct>=80?'var(--green)':pct>=40?'var(--gold)':'var(--sub)';}
 function renderStudyRoot(){
   sessionReturn=renderStudyRoot;
   const books=booksList();
+  if(books.length<2)studyReorder=false;
+  const bookRow=(b,i)=>{
+    const n=QUESTIONS.filter(d=>d.book===b).length;
+    const m=sectionMastery(b,null);
+    if(studyReorder){
+      return `<div class="row reorder-row">
+        <div class="row-main"><div class="row-title">${esc(b)}</div>
+        <div class="row-sub">${sectionsOf(b).length} セクション · ${n} 問</div></div>
+        <div class="reorder-btns">
+          <button class="mv-btn" data-mv="${i}" data-d="-1" ${i===0?"disabled":""} aria-label="上へ">↑</button>
+          <button class="mv-btn" data-mv="${i}" data-d="1" ${i===books.length-1?"disabled":""} aria-label="下へ">↓</button>
+        </div></div>`;
+    }
+    return `<button class="row" data-book="${encodeURIComponent(b)}">
+      <div class="row-main">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px">
+          <div class="row-title">${esc(b)}</div>
+          <div class="pct-tag" style="color:${pctColorOf(m.pct)}">${m.pct}%</div>
+        </div>
+        ${masteryBarHTML(m.counts,"margin:9px 0 5px")}
+        <div class="row-sub">${sectionsOf(b).length} セクション · ${n} 問 · マスター ${m.counts[4]}／${m.tot}</div>
+      </div></button>`;
+  };
   screen.innerHTML=`
     <div class="lt-eyebrow">Study</div>
     <div class="lt">学習</div>
@@ -1624,17 +1671,20 @@ function renderStudyRoot(){
       <div class="row-main"><div class="row-title">マイリスト学習</div>
       <div class="row-sub">${MYLISTS.length?`${MYLISTS.length} 件のリスト`:"教材・品詞をまたいで自分の範囲を作成"}</div></div>
       <div class="row-arrow">→</div></button>
-    <div class="divider"><span>Books</span></div>
-    <div class="list">
-      ${books.map(b=>{
-        const n=QUESTIONS.filter(d=>d.book===b).length;
-        return `<button class="row" data-book="${encodeURIComponent(b)}">
-          <div class="row-main"><div class="row-title">${esc(b)}</div>
-          <div class="row-sub">${sectionsOf(b).length} セクション · ${n} 問</div></div>
-          <div class="row-arrow">→</div></button>`;}).join("")}
-    </div>`;
+    <div class="list-head">
+      <div class="divider" style="flex:1;margin:0"><span>Books</span></div>
+      ${books.length>1?`<button class="link-btn" id="reorderBtn">${studyReorder?"完了":"並べ替え"}</button>`:""}
+    </div>
+    ${studyReorder?`<p class="reorder-note">↑↓で順番を変えられます。この順番は単語帳や登録先の一覧にも反映されます。</p>`:""}
+    <div class="list">${books.map(bookRow).join("")}</div>`;
   $("#reviewCard").onclick=()=>renderReviewScope();
   $("#mylistCard").onclick=()=>renderMyLists();
+  const rb=$("#reorderBtn");
+  if(rb)rb.onclick=()=>{studyReorder=!studyReorder;renderStudyRoot();};
+  document.querySelectorAll(".mv-btn").forEach(b=>b.onclick=async()=>{
+    await moveBook(+b.dataset.mv,+b.dataset.d);
+    renderStudyRoot();
+  });
   document.querySelectorAll(".row[data-book]").forEach(r=>r.onclick=()=>renderSections(decodeURIComponent(r.dataset.book)));
 }
 function sectionMastery(book,sec){
@@ -1652,11 +1702,20 @@ function renderSections(book){
     <div class="navbar"><button class="back" id="bk">← 教材</button><div class="nav-title"><b>${esc(book)}</b></div></div>
     <div class="lt" style="font-size:22px">セクションを選ぶ</div>
     <div class="lt-sub">習熟度バーで進み具合を見ながら選べます。</div>
+    ${(()=>{const m=sectionMastery(book,null);
+      return `<div class="card book-total">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px">
+          <div class="ic" style="margin:0">教材全体</div>
+          <div class="pct-tag big" style="color:${pctColorOf(m.pct)}">${m.pct}%</div>
+        </div>
+        ${masteryBarHTML(m.counts)}
+        <div class="mlegend">${m.counts.map((n,i)=>`<span><span class="dot" style="background:${BAR_COLORS[i]}"></span>${BAR_NAMES[i]} ${n}</span>`).join("")}</div>
+      </div>`;})()}
     <div class="list">
       ${sectionsOf(book).map(sec=>{
         const its=itemsOf(book,sec,null);
         const m=sectionMastery(book,sec);
-        const pctColor=m.pct>=80?'var(--green)':m.pct>=40?'var(--gold)':'var(--sub)';
+        const pctColor=pctColorOf(m.pct);
         return `<button class="row sec-row" data-sec="${encodeURIComponent(sec)}">
           <div class="row-main">
             <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px">
