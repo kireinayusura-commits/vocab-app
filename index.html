@@ -808,10 +808,32 @@ async function recordTimeout(it){           // 時間切れ：不正解にせず
 }
 // status: 0=未学習, "review"=つまずき(要復習), 1/2/3=習熟度
 function statusOf(p){
-  if(!p||p.seen===0)return 0;
+  if(!p||p.seen===0)return 0;              // 未学習＝一度も出題されていない単語だけ
   const l=levelOf(p);
   if(l===0&&p.needsReview)return "review";
+  // 学習済みで点数が0の単語（間違えて下がったあと同じ日に正解し、1日1回の加点に届かなかった等）は
+  // 未学習ではなく学習中として扱う
+  if(l===0)return 1;
   return l;
+}
+// 単語のつづりを直したとき、学習記録（習熟度・チェック）を新しいつづりへ引き継ぐ
+async function carryWordRecord(oldKey,newKey){
+  if(!oldKey||!newKey||oldKey===newKey)return;
+  const from=PROG.get(oldKey);
+  if(from){
+    const to=PROG.get(newKey);
+    // 新しいつづりにも記録があれば（別の教材に同じ単語がある等）、進んでいる方を残す
+    const keep=(!to||from.pts>to.pts||(from.pts===to.pts&&from.seen>to.seen))?{...from}:to;
+    await saveProg(newKey,keep);
+  }
+  if(CHECK[oldKey]){CHECK[newKey]=true;}
+  if(FLASH[oldKey]&&!FLASH[newKey]){FLASH[newKey]=FLASH[oldKey];}
+  // 古いつづりの単語がほかの教材に残っていなければ、古い記録は片付ける
+  if(!QUESTIONS.some(d=>wordKey(d)===oldKey)){
+    if(from){PROG.delete(oldKey);try{await DB.del("progress",oldKey);}catch(e){}}
+    delete CHECK[oldKey];delete FLASH[oldKey];
+  }
+  try{await DB.put("kv","check",CHECK);await DB.put("kv","flash",FLASH);}catch(e){}
 }
 function masteryCounts(){
   // [未学習, つまずき, 学習中, 定着中, マスター]
@@ -2268,10 +2290,12 @@ function renderWordEdit(bookIdx,wordIdx,backFn){
   $("#eSave").onclick=async()=>{
     const v=id=>{const e=$(id);return e?e.value.trim():"";};
     if(!v("#eQ")||!v("#eA")){toast("単語と訳は必須です");return;}
+    const oldKey=wordKey(w);
     Object.assign(w,{question:v("#eQ"),answer:v("#eA"),
       category:cat||v("#eCustomPos")||"",tag:v("#eTag"),
       note:v("#eN"),example:v("#eE"),exampleJa:v("#eEj")});
     await syncLibrary();
+    await carryWordRecord(oldKey,wordKey(w));   // つづりを直しても習熟度を引き継ぐ
     toast("保存しました");backFn();
   };
   $("#eDel").onclick=async()=>{
@@ -3186,11 +3210,14 @@ function renderEditorForm(idx,backQuery){
       let b=LIBRARY.find(x=>x.name===next.book)||LIBRARY.find(x=>x.items.some(i=>i.book===next.book))||LIBRARY[0];
       if(!b){b={name:next.book,items:[]};LIBRARY.push(b);}
       b.items.push(next);
-    }else{
+    }
+    const oldKey=isNew?null:wordKey(QUESTIONS[idx]);
+    if(!isNew){
       const target=QUESTIONS[idx];
       for(const b of LIBRARY){const j=b.items.indexOf(target);if(j>=0){b.items[j]=next;break;}}
     }
     await syncLibrary();
+    if(oldKey)await carryWordRecord(oldKey,wordKey(next));   // つづりを直しても習熟度を引き継ぐ
     toast(isNew?"追加しました":"保存しました");
     renderEditorList(backQuery);
   };
