@@ -329,6 +329,11 @@
   .ex-speak::after{content:"";position:absolute;inset:-8px;}   /* 見た目より広くタップできる */
   .ex-speak svg{width:14px;height:14px;}
   .ex-speak.playing{border-color:var(--gold);}
+  .flash-bridge{display:block;margin:14px auto 0;background:none;border:1px solid var(--line);border-radius:12px;
+    color:var(--gold);font-family:'Noto Sans JP';font-size:14px;font-weight:700;padding:12px 18px;cursor:pointer;}
+  .flash-bridge:active{border-color:var(--gold);}
+  .fb-flash{display:block;margin:10px auto 0;background:none;border:none;color:var(--gold);font-family:'Noto Sans JP';
+    font-size:13px;font-weight:600;text-decoration:underline;text-underline-offset:3px;padding:8px 12px;cursor:pointer;}
   .row-edit{flex:none;background:none;border:1px solid var(--line);border-radius:9px;color:var(--sub);
     font-family:'Noto Sans JP';font-size:12px;padding:7px 11px;cursor:pointer;}
   .flash-actions{display:flex;gap:11px;margin-top:16px;}
@@ -1230,8 +1235,9 @@ function startQuiz(queue,label,chosenMode,returnTo){
 function quitQuiz(){
   stopTimer();
   stopSpeak();
+  const back=(session&&session.returnTo)||sessionReturn||renderStudyRoot;   // 問題を始めた画面へ戻る
   session=null;
-  (sessionReturn||renderStudyRoot)();
+  back();
 }
 let sessionReturn=null;
 
@@ -1486,6 +1492,18 @@ function finishAnswer(ok,item,msg,helpUsed,forceReview){
   if(ok&&forceReview&&!inWrong())s.wrong.push(item);
   const n=$("#next");n.classList.add("show");
   n.textContent=(s.idx+1>=s.total)?"結果を見る →":"NEXT →";
+  // 答えたあと、この単語を単語帳のカードで確かめられる
+  fb.insertAdjacentHTML("beforeend",`<button class="fb-flash" id="toFlash">単語帳で見る</button>`);
+  const tf=$("#toFlash");
+  if(tf)tf.onclick=()=>openWordFromQuiz(item);
+}
+// 問題中の単語を単語帳タブのカードで開く。戻ると問題の続きへ（途中のめくりは保たれる）
+function openWordFromQuiz(item){
+  const prev=flashSession;
+  goTab("myvocab",()=>startFlash([item],"学習中の単語","en2ja",()=>{
+    flashSession=prev;
+    goTab("study",resumeQuiz);
+  },{returnLabel:"問題に戻る"}));
 }
 function advance(){
   stopTimer();
@@ -1528,11 +1546,17 @@ function renderResult(){
       </div>
       ${retryN>0?`<div class="retry-note">${retryNote}</div>
         <button class="btn danger" id="retry">${retryN}問を再チャレンジ</button>`:""}
+      ${retryN>0?`<button class="btn ghost" id="wrongFlash" style="margin-top:10px">${retryN}語を単語帳でめくる</button>`:""}
       <button class="btn primary" id="menu" style="margin-top:10px">メニューに戻る</button>
     </div>`;
   requestAnimationFrame(()=>{const a=$("#arc");a.style.transition="stroke-dashoffset 1s cubic-bezier(.2,.8,.3,1)";a.style.strokeDashoffset=off;});
   if(retryN>0)$("#retry").onclick=()=>startQuiz(shuffle(s.wrong),s.label+" · 復習",s.chosenMode);
   $("#menu").onclick=quitQuiz;
+  const wf=$("#wrongFlash");
+  if(wf)wf.onclick=()=>{
+    const cards=s.wrong.slice(),label=s.label+" · 復習";
+    goTab("myvocab",()=>startFlash(cards,label,"en2ja",()=>renderMyVocab()));
+  };
 }
 
 /* ================================================================
@@ -1546,18 +1570,49 @@ function switchTab(tab){
   currentTab=tab;
   stopSpeak();
   document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active",b.dataset.tab===tab));
+  // 各タブは自分の作業を覚えておく：学習タブ＝問題、単語帳タブ＝めくり
   if(tab==="study"){
-    // 中断していた作業を自動再開（単語帳のめくり → 学習の問題 → なければ学習トップ）
-    // 復帰時は自動読み上げを抑止（音量増大・鳴り直し防止）
-    suppressAutoSpeak=true;
-    if(flashSession){if(flashSession)flashSession._spokenIdx=flashSession.idx;renderFlashCard();}
-    else if(session)renderQ();
+    if(session)resumeQuiz();
     else renderStudyRoot();
-    suppressAutoSpeak=false;
+  }else if(tab==="myvocab"){
+    if(flashSession)resumeFlash();
+    else renderMyVocab();
   }else{
-    ({home:renderHome,myvocab:renderMyVocab,progress:renderProgress,settings:renderSettings})[tab]();
+    ({home:renderHome,progress:renderProgress,settings:renderSettings})[tab]();
   }
   window.scrollTo(0,0);
+}
+// 別のタブの画面へ移る（下のタブの表示も合わせる）。それぞれのタブの作業は残る
+function goTab(tab,render){
+  stopTimer();stopSpeak();studyReorder=false;
+  currentTab=tab;
+  document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active",b.dataset.tab===tab));
+  render();
+  window.scrollTo(0,0);
+}
+// 中断した問題を再開。答え終わった問題で離れていたら、同じ問題を二重に解かないよう次へ進む
+function resumeQuiz(){
+  const s=session;
+  if(!s){renderStudyRoot();return;}
+  if(s.idx>=s.total){renderResult();return;}
+  if(s.answered){advance();return;}
+  suppressAutoSpeak=true;   // 同じ問題に戻るときは読み上げ直さない
+  renderQ();
+  suppressAutoSpeak=false;
+}
+// 中断しためくりを再開（同じカードは読み上げ直さない）
+function resumeFlash(){
+  const fs=flashSession;
+  if(fs.done){renderFlashDone();return;}
+  fs._spokenIdx=fs.idx;
+  renderFlashCard();
+}
+// 単語帳でめくった範囲を、学習タブで問題にする
+function quizFromFlash(fs){
+  if(session&&session.idx<session.total&&!confirm("学習タブに途中の問題があります。この範囲で新しく始めますか？"))return;
+  const items=fs.cards.slice(),label=fs.label;
+  if(fs.done)flashSession=null;      // めくり終えた範囲は片付ける（途中なら単語帳タブに残す）
+  goTab("study",()=>renderFormSelect(shuffle(items),label,renderStudyRoot));
 }
 document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>switchTab(b.dataset.tab));
 
@@ -1791,8 +1846,10 @@ function renderRange(book,sec){
       <div class="count-chip" data-lim="20">20問</div>
       <div class="count-chip" data-lim="10">10問</div>
     </div>
-    <button class="btn primary" id="start" style="margin-top:20px">この範囲で学習（<span id="cnt">${total}</span>問）</button>`;
+    <button class="btn primary" id="start" style="margin-top:20px">この範囲で学習（<span id="cnt">${total}</span>問）</button>
+    <button class="btn ghost" id="toFlashSec" style="margin-top:10px">このセクションを単語帳でめくる</button>`;
   $("#bk").onclick=()=>renderSections(book);
+  $("#toFlashSec").onclick=()=>goTab("myvocab",()=>renderFlashStart(itemsOf(book,sec,null),sec,()=>renderFlashSections(book)));
   const refresh=()=>{
     const base=countItems();
     const n=limit>0?Math.min(limit,base.length):base.length;
@@ -1976,7 +2033,6 @@ function renderMyListForm(i){
 function statusBadgeShort(it){const b=statusBadge(getProg(wordKey(it)));return `<span class="lvl-badge ${b.cls}">${b.label}</span>`;}
 function renderMyVocab(query){
   let curQuery=query||"";                   // 現在の検索語（結果だけ差し替えるため保持）
-  sessionReturn=()=>renderMyVocab(curQuery);
   const reviewN=needsReviewItems(QUESTIONS).length;
   const checkedN=checkedItems().length;
   const totalWords=QUESTIONS.length;
@@ -2329,7 +2385,6 @@ function flashStats(items){
   return {known,later,untouched,total:seen.size};
 }
 function renderFlashBooks(){
-  sessionReturn=renderFlashBooks;
   screen.innerHTML=`
     <div class="navbar"><button class="back" id="bk">← 単語帳</button><div class="nav-title"><b>教材から選ぶ</b></div></div>
     <div class="lt" style="font-size:22px">教材を選ぶ</div>
@@ -2421,8 +2476,8 @@ function renderFlashStart(items,label,backFn){
   draw();
 }
 let flashSession=null;
-function startFlash(cards,label,dir,backFn){
-  flashSession={cards,label,dir,backFn,idx:0,showEn:true,showJa:false};
+function startFlash(cards,label,dir,backFn,opts){
+  flashSession={cards,label,dir,backFn,opts:opts||{},idx:0,showEn:true,showJa:false};
   renderFlashCard();
 }
 function posShort(it){
@@ -2466,9 +2521,16 @@ function renderFlashCard(){
         <div class="fc-half fc-bottom" id="botHalf">${botInner}</div>
       </div>
       <div class="fc-swipehint">${fs.cards.length===1?"上下をタップで隠す・表示":`← スワイプでめくる →${fs.idx+1>=fs.cards.length?"（最後のカード）":""}`}</div>
-    </div>`;
+    </div>
+    ${fs.opts.returnLabel?`<button class="flash-bridge" id="fbBridge">← ${esc(fs.opts.returnLabel)}</button>`
+      :fs.cards.length>1?`<button class="flash-bridge" id="fbBridge">この範囲を問題で確認 →</button>`:""}`;
   window.scrollTo(0,0);
   $("#bk").onclick=()=>{flashSession=null;(fs.backFn||renderFlashBooks)();};
+  const fbb=$("#fbBridge");
+  if(fbb)fbb.onclick=()=>{
+    if(fs.opts.returnLabel){flashSession=null;fs.backFn();}   // 問題から開いたカード → 問題に戻る
+    else quizFromFlash(fs);                                       // めくった範囲を問題で確認
+  };
   $("#fspeak").onclick=e=>{e.stopPropagation();speak(it.question,$("#fspeak"));};
   const exs=$("#exSpeak");
   if(exs)exs.onclick=e=>{e.stopPropagation();speak(fillCloze(it),exs);};   // 例文を読む（英語側は隠さない）
@@ -2510,6 +2572,7 @@ function attachSwipe(el,onLeft,onRight){
 }
 function renderFlashDone(){
   const fs=flashSession;
+  fs.done=true;
   const checkedInSet=fs.cards.filter(it=>isChecked(it)).length;
   screen.innerHTML=`
     <div class="result">
@@ -2517,10 +2580,12 @@ function renderFlashDone(){
       <div style="font-size:46px;margin:20px 0 6px">📖</div>
       <div class="res-msg" style="color:var(--gold)">完了</div>
       <div class="res-sub">${fs.cards.length} 枚をめくりました。${checkedInSet?`<br>チェックした単語：${checkedInSet} 語`:""}</div>
-      <button class="btn primary" id="restart" style="margin-top:14px">もう一度めくる</button>
+      <button class="btn primary" id="toQuiz" style="margin-top:14px">この範囲を問題で確認</button>
+      <button class="btn ghost" id="restart" style="margin-top:10px">もう一度めくる</button>
       ${checkedInSet?`<button class="btn ghost" id="goChecked" style="margin-top:10px">チェックした単語だけめくる</button>`:""}
       <button class="btn ghost" id="back" style="margin-top:10px">単語帳メニューに戻る</button>
     </div>`;
+  $("#toQuiz").onclick=()=>quizFromFlash(fs);
   $("#restart").onclick=()=>startFlash(fs.cards,fs.label,fs.dir,fs.backFn);
   const gc=$("#goChecked");
   if(gc)gc.onclick=()=>startFlash(fs.cards.filter(it=>isChecked(it)),fs.label+" · チェック",fs.dir,fs.backFn);
