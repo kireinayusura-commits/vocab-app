@@ -329,6 +329,14 @@
   .ex-speak::after{content:"";position:absolute;inset:-8px;}   /* 見た目より広くタップできる */
   .ex-speak svg{width:14px;height:14px;}
   .ex-speak.playing{border-color:var(--gold);}
+  .gauge-toggle{flex:none;display:inline-flex;align-items:center;gap:7px;background:none;cursor:pointer;
+    border:1px solid var(--line);border-radius:99px;padding:7px 13px;color:var(--sub);
+    font-family:'Noto Sans JP';font-size:12px;font-weight:700;}
+  .gauge-toggle::before{content:"";width:22px;height:5px;border-radius:99px;
+    background:linear-gradient(90deg,var(--green) 0 35%,var(--gold) 35% 60%,var(--blue) 60% 80%,#3a3f4a 80%);opacity:.45;}
+  .gauge-toggle.on{border-color:var(--gold);color:var(--gold);}
+  .gauge-toggle.on::before{opacity:1;}
+  .meta-right{display:inline-flex;align-items:center;gap:8px;}
   .flash-bridge{display:block;margin:14px auto 0;background:none;border:1px solid var(--line);border-radius:12px;
     color:var(--gold);font-family:'Noto Sans JP';font-size:14px;font-weight:700;padding:12px 18px;cursor:pointer;}
   .flash-bridge:active{border-color:var(--gold);}
@@ -594,6 +602,7 @@ let SETTINGS={goalDate:"",autoPlay:true,goalScope:{books:[],cats:[]},speechRate:
   showPos:false,showExample:true,   // 四択での品詞表示 / 回答後の例文表示
   voiceURI:"",                       // 読み上げ音声の指定（空＝自動で高品質を選ぶ）
   showAllVoices:false,               // 効果音的な声も一覧に出す（切り分け用）
+  flashGauge:false,                  // 単語帳の一覧・カードに習熟度を表示する
   cloudTTS:false,                    // Google Cloud TTS（高品質音声）を使う
   cloudKey:"",                       // Google Cloud の APIキー（端末内のみ保存・バックアップに含めない）
   cloudVoice:"",                     // 使用する Google の声（例 en-US-Chirp3-HD-…）
@@ -1154,45 +1163,58 @@ function levenshtein(a,b){
   return dp[m][n];
 }
 function normSpell(s){return String(s).trim().toLowerCase().replace(/~/g," ").replace(/\s+/g," ").trim();}
+// 選択肢の「同じ答え」判定用。…と...、全角半角、空白・記号、括弧の補足の違いは同じものとみなす
+function choiceKey(t){
+  const base=String(t||"").normalize("NFKC").toLowerCase();
+  const strip=x=>x.replace(/[\s.…‥・、，,。;；:：!！?？~～〜\-－―'"“”‘’\/／]/g,"");
+  const noParen=strip(base.replace(/[（(\[［〔【][^）)\]］〕】]*[）)\]］〕】]/g,""));
+  return noParen||strip(base);
+}
+// 不正解の選択肢を集める。正解と同じ単語（別の教材の重複を含む）や、表記違いの同じ答えは入れない
+function pickDistractors(it,tiers,textOf,correctText,extraSkip){
+  const out=[],seen=new Set([choiceKey(correctText)]);
+  const self=wordKey(it);
+  for(const tier of tiers){
+    for(const d of shuffle(tier)){
+      if(out.length>=3)break;
+      if(d===it||wordKey(d)===self)continue;
+      if(extraSkip&&extraSkip(d))continue;
+      const t=textOf(d);if(!t)continue;
+      const k=choiceKey(t);
+      if(!k||seen.has(k))continue;
+      out.push(t);seen.add(k);
+    }
+    if(out.length>=3)break;
+  }
+  return out;
+}
 function buildChoices(it){                  // 英→日: 同category優先で意味の4択
-  if(it.choices.length>=3)return shuffle([it.answer,...it.choices.slice(0,3)]);
-  const distract=[],seen=new Set([it.answer]);
   const tiers=[
     QUESTIONS.filter(d=>d.category===it.category&&d.type===it.type),
     QUESTIONS.filter(d=>d.type===it.type),QUESTIONS];
-  for(const tier of tiers){
-    for(const d of shuffle(tier)){if(distract.length>=3)break;
-      if(!seen.has(d.answer)){distract.push(d.answer);seen.add(d.answer);}}
-    if(distract.length>=3)break;
-  }
-  return shuffle([it.answer,...distract]);
+  // 教材に書かれた選択肢があれば優先（正解と同じ表記のものは除く）
+  const given=[];const gs=new Set([choiceKey(it.answer)]);
+  for(const c of (it.choices||[])){const k=choiceKey(c);if(c&&k&&!gs.has(k)&&given.length<3){given.push(c);gs.add(k);}}
+  if(given.length>=3)return shuffle([it.answer,...given]);
+  const more=pickDistractors(it,tiers,d=>d.answer,it.answer,d=>gs.has(choiceKey(d.answer)));
+  return shuffle([it.answer,...given,...more].slice(0,4));
 }
 function buildChoicesReverse(it){           // 日→英: 英語の4択
-  const distract=[],seen=new Set([it.question]);
   const tiers=[
     QUESTIONS.filter(d=>d.category===it.category&&d.type===it.type&&canEnglishAnswer(d)),
     QUESTIONS.filter(d=>d.type===it.type&&canEnglishAnswer(d)),
     QUESTIONS.filter(d=>canEnglishAnswer(d))];
-  for(const tier of tiers){
-    for(const d of shuffle(tier)){if(distract.length>=3)break;
-      if(!seen.has(d.question)){distract.push(d.question);seen.add(d.question);}}
-    if(distract.length>=3)break;
-  }
-  return shuffle([it.question,...distract]);
+  // 日本語の意味が同じ単語（as if / as though など）は、どちらも正解になってしまうので入れない
+  const meaning=choiceKey(it.answer);
+  return shuffle([it.question,...pickDistractors(it,tiers,d=>d.question,it.question,d=>choiceKey(d.answer)===meaning)]);
 }
 function buildChoicesCloze(it,correct){     // 穴埋め4択
-  const distract=[],seen=new Set([correct.toLowerCase()]);
   const tiers=[
     QUESTIONS.filter(d=>d.category===it.category&&d!==it),
     QUESTIONS.filter(d=>d.type===it.type&&d!==it),
     QUESTIONS.filter(d=>d!==it)];
-  for(const tier of tiers){
-    for(const d of shuffle(tier)){if(distract.length>=3)break;
-      const w=(d.exampleAnswer&&hasExample(d))?d.exampleAnswer.trim():d.question.replace(/~/g,"").trim();
-      if(w&&!seen.has(w.toLowerCase())){distract.push(w);seen.add(w.toLowerCase());}}
-    if(distract.length>=3)break;
-  }
-  return shuffle([correct,...distract]);
+  const textOf=d=>(d.exampleAnswer&&hasExample(d))?d.exampleAnswer.trim():d.question.replace(/~/g,"").trim();
+  return shuffle([correct,...pickDistractors(it,tiers,textOf,correct)]);
 }
 // 形式の自動フォールバック
 function effectiveMode(it,chosen){
@@ -1338,7 +1360,7 @@ function renderQ(){
     stopTimer();
     document.querySelectorAll(".opt").forEach(b=>{b.disabled=true;
       const v=decodeURIComponent(b.dataset.v);
-      if(v===correct)b.classList.add("correct");else b.classList.add("dim");});
+      if(choiceKey(v)===choiceKey(correct))b.classList.add("correct");else b.classList.add("dim");});
     const rc=$("#recant");if(rc)rc.remove();
     speak(correct===item.question?item.question:item.question,null);
     await recordTimeout(item);
@@ -1382,7 +1404,7 @@ function renderQ(){
 function paintMC(correct,picked){
   document.querySelectorAll(".opt").forEach(b=>{
     b.disabled=true;const v=decodeURIComponent(b.dataset.v);
-    if(v===correct)b.classList.add("correct");
+    if(choiceKey(v)===choiceKey(correct))b.classList.add("correct");
     else if(b===picked)b.classList.add("wrong");
     else b.classList.add("dim");
   });
@@ -1390,7 +1412,7 @@ function paintMC(correct,picked){
 async function chooseMC(btn,item,correct,mode,selfUnknown){
   const s=session;if(s.answered)return;s.answered=true;
   const picked=decodeURIComponent(btn.dataset.v);
-  const pickedCorrect=picked===correct;
+  const pickedCorrect=choiceKey(picked)===choiceKey(correct);   // 表記の違いだけなら正解
   paintMC(correct,btn);
   if(mode==="ja2en")speak(item.question,null);
   if(mode==="cloze_mc")speak(fillCloze(item),null);
@@ -1439,7 +1461,7 @@ function typedHelp(item,mode){
   opts.querySelectorAll(".opt").forEach(b=>b.onclick=async()=>{
     if(s.answered)return;s.answered=true;
     const picked=decodeURIComponent(b.dataset.v);
-    const right=picked===correct;
+    const right=choiceKey(picked)===choiceKey(correct);
     paintMC(correct,b);
     if(mode==="cloze_type")speak(fillCloze(item),null);
     else speak(item.question,null);
@@ -1779,15 +1801,7 @@ function renderSections(book){
     <div class="navbar"><button class="back" id="bk">← 教材</button><div class="nav-title"><b>${esc(book)}</b></div></div>
     <div class="lt" style="font-size:22px">セクションを選ぶ</div>
     <div class="lt-sub">習熟度バーで進み具合を見ながら選べます。</div>
-    ${(()=>{const m=sectionMastery(book,null);
-      return `<div class="card book-total">
-        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px">
-          <div class="ic" style="margin:0">教材全体</div>
-          <div class="pct-tag big" style="color:${pctColorOf(m.pct)}">${m.pct}%</div>
-        </div>
-        ${masteryBarHTML(m.counts)}
-        <div class="mlegend">${m.counts.map((n,i)=>`<span><span class="dot" style="background:${BAR_COLORS[i]}"></span>${BAR_NAMES[i]} ${n}</span>`).join("")}</div>
-      </div>`;})()}
+    ${bookTotalCardHTML(book)}
     <div class="list">
       ${sectionsOf(book).map(sec=>{
         const its=itemsOf(book,sec,null);
@@ -2384,19 +2398,58 @@ function flashStats(items){
     const m=FLASH[k];if(m==="known")known++;else if(m==="later")later++;else untouched++;}
   return {known,later,untouched,total:seen.size};
 }
+// 単語帳の一覧で習熟度ゲージを出す／隠す切り替え
+function gaugeToggleHTML(label){
+  return `<div class="list-head">
+    <div class="divider" style="flex:1;margin:0"><span>${label}</span></div>
+    <button class="gauge-toggle ${SETTINGS.flashGauge?'on':''}" id="gaugeToggle" aria-pressed="${SETTINGS.flashGauge}">習熟度</button>
+  </div>`;
+}
+function bindGaugeToggle(rerender){
+  const b=$("#gaugeToggle");
+  if(b)b.onclick=()=>{
+    SETTINGS.flashGauge=!SETTINGS.flashGauge;
+    rerender();
+    DB.put("kv","settings",SETTINGS).catch(()=>{});
+  };
+}
+function gaugeRowMain(title,m,sub){
+  return `<div class="row-main">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px">
+      <div class="row-title">${esc(title)}</div>
+      <div class="pct-tag" style="color:${pctColorOf(m.pct)}">${m.pct}%</div>
+    </div>
+    ${masteryBarHTML(m.counts,"margin:9px 0 5px")}
+    <div class="row-sub">${sub} · マスター ${m.counts[4]}／${m.tot}</div>
+  </div>`;
+}
+function bookTotalCardHTML(book){
+  const m=sectionMastery(book,null);
+  return `<div class="card book-total">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px">
+      <div class="ic" style="margin:0">教材全体</div>
+      <div class="pct-tag big" style="color:${pctColorOf(m.pct)}">${m.pct}%</div>
+    </div>
+    ${masteryBarHTML(m.counts)}
+    <div class="mlegend">${m.counts.map((n,i)=>`<span><span class="dot" style="background:${BAR_COLORS[i]}"></span>${BAR_NAMES[i]} ${n}</span>`).join("")}</div>
+  </div>`;
+}
 function renderFlashBooks(){
   screen.innerHTML=`
     <div class="navbar"><button class="back" id="bk">← 単語帳</button><div class="nav-title"><b>教材から選ぶ</b></div></div>
     <div class="lt" style="font-size:22px">教材を選ぶ</div>
-    <div class="lt-sub">教材を選んでめくります。テストの習熟度・要復習とは別に管理されます。</div>
+    <div class="lt-sub">教材を選んでめくります。</div>
+    ${gaugeToggleHTML("Books")}
     <div class="list">
       ${booksList().map(b=>{
         const n=itemsOf(b,null,null).length;
+        const sub=`${sectionsOf(b).length} セクション · ${n} 問`;
         return `<button class="row" data-book="${encodeURIComponent(b)}">
-          <div class="row-main"><div class="row-title">${esc(b)}</div>
-          <div class="row-sub">${sectionsOf(b).length} セクション · ${n} 問</div></div>
-          <div class="row-arrow">→</div></button>`;}).join("")}
+          ${SETTINGS.flashGauge?gaugeRowMain(b,sectionMastery(b,null),sub):`<div class="row-main"><div class="row-title">${esc(b)}</div>
+          <div class="row-sub">${sub}</div></div>
+          <div class="row-arrow">→</div>`}</button>`;}).join("")}
     </div>`;
+  bindGaugeToggle(renderFlashBooks);
   $("#bk").onclick=()=>renderMyVocab();
   document.querySelectorAll(".row[data-book]").forEach(r=>r.onclick=()=>renderFlashSections(decodeURIComponent(r.dataset.book)));
 }
@@ -2408,16 +2461,19 @@ function renderFlashSections(book){
     <button class="row accent" id="all">
       <div class="row-main"><div class="row-title">この教材ぜんぶ</div>
       <div class="row-sub">${itemsOf(book,null,null).length} 問をめくる</div></div><div class="row-arrow">→</div></button>
-    <div class="divider"><span>Sections</span></div>
+    ${SETTINGS.flashGauge?bookTotalCardHTML(book):""}
+    ${gaugeToggleHTML("Sections")}
     <div class="list">
       ${sectionsOf(book).map(sec=>{
         const its=itemsOf(book,sec,null);
         const ck=its.filter(it=>isChecked(it)).length;
+        const sub=`${its.length} 問${ck?` · ★ ${ck}`:""}`;
         return `<button class="row" data-sec="${encodeURIComponent(sec)}">
-          <div class="row-main"><div class="row-title">${esc(sec)}</div>
-          <div class="row-sub">${its.length} 問${ck?` · ★ ${ck}`:""}</div></div>
-          <div class="row-arrow">→</div></button>`;}).join("")}
+          ${SETTINGS.flashGauge?gaugeRowMain(sec,sectionMastery(book,sec),sub):`<div class="row-main"><div class="row-title">${esc(sec)}</div>
+          <div class="row-sub">${sub}</div></div>
+          <div class="row-arrow">→</div>`}</button>`;}).join("")}
     </div>`;
+  bindGaugeToggle(()=>renderFlashSections(book));
   $("#bk").onclick=renderFlashBooks;
   $("#all").onclick=()=>renderFlashStart(itemsOf(book,null,null),book,()=>renderFlashSections(book));
   document.querySelectorAll(".row[data-sec]").forEach(r=>r.onclick=()=>{
@@ -2510,7 +2566,7 @@ function renderFlashCard(){
         <svg viewBox="0 0 24 24" fill="${checked?'currentColor':'none'}" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
       </button></div>
     <div class="flash-meta"><span>${String(fs.idx+1).padStart(2,'0')} / ${String(fs.cards.length).padStart(2,'0')}</span>
-      <span>${checked?'<span style="color:var(--gold)">★ チェック中</span>':"めくり"}</span></div>
+      <span class="meta-right">${SETTINGS.flashGauge?statusBadgeShort(it):""}${checked?'<span style="color:var(--gold)">★ チェック中</span>':(SETTINGS.flashGauge?"":"めくり")}</span></div>
     <div class="track"><div style="width:${(fs.idx+1)/fs.cards.length*100}%"></div></div>
     <div style="height:14px"></div>
     <div class="flash-swipe" id="swipeZone">
