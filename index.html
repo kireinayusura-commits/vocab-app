@@ -1234,11 +1234,17 @@ let session=null;
 let _timer=null;
 function stopTimer(){if(_timer){clearInterval(_timer);_timer=null;}}
 // start a countdown bar; calls onExpire() when time runs out
-function startTimer(onExpire){
+// 段階ごとの制限時間（秒）。gate＝わかる／わからない、choice＝四択。未設定なら従来の共通値を使う
+function stageSec(stage){
+  const v=stage==="gate"?SETTINGS.gateSec:SETTINGS.choiceSec;
+  const n=Math.round(+v||SETTINGS.timeSec||8);
+  return Math.min(20,Math.max(1,n));
+}
+function startTimer(onExpire,sec){
   stopTimer();
   if(!SETTINGS.timed)return;
   const fill=$("#timerFill");if(!fill)return;
-  const total=(SETTINGS.timeSec||8)*1000;
+  const total=(sec||SETTINGS.timeSec||8)*1000;
   let start=Date.now();
   fill.style.width="100%";fill.className="";
   _timer=setInterval(()=>{
@@ -1248,7 +1254,7 @@ function startTimer(onExpire){
     fill.style.width=pct+"%";
     fill.className=pct<25?"danger":pct<50?"warn":"";
     if(left<=0){stopTimer();onExpire&&onExpire();}
-  },100);
+  },50);   // 1秒でもバーがなめらかに減るよう細かく更新
 }
 function startQuiz(queue,label,chosenMode,returnTo){
   session={queue,label,chosenMode,returnTo,idx:0,score:0,total:queue.length,wrong:[],answered:false};
@@ -1376,14 +1382,14 @@ function renderQ(){
     const rc=$("#recant");
     if(rc)rc.onclick=()=>{stopTimer();renderOpts(true);};   // 要復習扱いに切り替えて選択肢を出し直す
     // 選択肢提示後の制限時間（en2jaのみ）
-    if(SETTINGS.timed&&mode==="en2ja")startTimer(()=>onChoiceTimeout(correct));
+    if(SETTINGS.timed&&mode==="en2ja")startTimer(()=>onChoiceTimeout(correct),stageSec("choice"));
   };
   if(mode==="en2ja"){
     // 2段階ゲート：わかる / わからない を選んでから選択肢を表示
     $("#gKnow").onclick=()=>{stopTimer();$("#gate").remove();renderOpts(false);};
     $("#gUnknown").onclick=()=>{stopTimer();$("#gate").remove();renderOpts(true);};
     // ゲート段階の制限時間：時間切れで自動的に「わからない」へ
-    if(SETTINGS.timed)startTimer(()=>{const g=$("#gate");if(g)g.remove();renderOpts(true);});
+    if(SETTINGS.timed)startTimer(()=>{const g=$("#gate");if(g)g.remove();renderOpts(true);},stageSec("gate"));
   }else{
     renderOpts(false);
   }
@@ -3043,8 +3049,11 @@ function renderSettings(){
       <div class="t-sub">考える時間を区切ってテンポよく。時間切れは不正解にせず要復習に</div></div>
       <button class="switch ${SETTINGS.timed?'on':''}" id="timedSwitch"></button>
     </div>
-    ${SETTINGS.timed?`<div class="field"><label>制限時間（${SETTINGS.timeSec||8} 秒）</label>
-      <input type="range" id="timeSec" min="4" max="20" step="1" value="${SETTINGS.timeSec||8}" style="width:100%"></div>`:""}
+    ${SETTINGS.timed?`<div class="field"><label>「わかる／わからない」の制限時間（${stageSec("gate")} 秒）</label>
+      <input type="range" id="gateSec" min="1" max="20" step="1" value="${stageSec("gate")}" style="width:100%"></div>
+    <div class="field"><label>四択の制限時間（${stageSec("choice")} 秒）</label>
+      <input type="range" id="choiceSec" min="1" max="20" step="1" value="${stageSec("choice")}" style="width:100%"></div>
+    <p class="cloud-note" style="margin-top:-4px">英→日の問題で使います。「わかる／わからない」で時間切れになると「わからない」、四択で時間切れになると答えを表示して要復習に入ります。</p>`:""}
 
     <div class="divider"><span>Data</span></div>
     <div class="list">
@@ -3165,8 +3174,16 @@ function renderSettings(){
     await DB.put("kv","settings",SETTINGS);};
   $("#rate").onchange=()=>speak("example",null);  // プレビュー
   $("#timedSwitch").onclick=async e=>{SETTINGS.timed=!SETTINGS.timed;await DB.put("kv","settings",SETTINGS);renderSettings();};
-  const ts=$("#timeSec");if(ts)ts.oninput=async e=>{SETTINGS.timeSec=+e.target.value;
-    e.target.previousElementSibling.textContent=`制限時間（${SETTINGS.timeSec} 秒）`;await DB.put("kv","settings",SETTINGS);};
+  const bindSec=(id,key,label)=>{
+    const el=$(id);if(!el)return;
+    el.oninput=e=>{
+      SETTINGS[key]=+e.target.value;
+      e.target.previousElementSibling.textContent=`${label}（${SETTINGS[key]} 秒）`;
+      DB.put("kv","settings",SETTINGS).catch(()=>{});
+    };
+  };
+  bindSec("#gateSec","gateSec","「わかる／わからない」の制限時間");
+  bindSec("#choiceSec","choiceSec","四択の制限時間");
   $("#library").onclick=renderLibrary;
   $("#imp").onclick=()=>$("#fileInput").click();
   $("#exp").onclick=()=>{
