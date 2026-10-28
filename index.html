@@ -966,30 +966,37 @@ function cleanSpeechText(text){
   return String(text||"").replace(/_{2,}/g," blank ").replace(/~/g," ").replace(/\s+/g," ").trim();
 }
 // 端末の音声（予備）で読み上げる
+// 端末の音声で読む。鳴り始めたら（または鳴らなかったら）解決する Promise を返す
 function deviceSpeak(clean,btn){
-  if(!synth||!clean)return;
+  if(!synth||!clean)return Promise.resolve(false);
   synth.cancel();   // 前の発話を必ず止める（重なり防止）
   const u=new SpeechSynthesisUtterance(clean);
   if(enVoice)u.voice=enVoice;
   u.lang=(enVoice&&enVoice.lang)||"en-US";
   u.rate=SETTINGS.speechRate||0.92;
   u.volume=1;u.pitch=1;   // 音量を明示（未指定だと端末により大きく再生されることがある）
-  if(btn){btn.classList.add("playing");u.onend=u.onerror=()=>btn.classList.remove("playing");}
-  synth.speak(u);
+  return new Promise(res=>{
+    let done=false;const fin=v=>{if(!done){done=true;res(v);}};
+    u.onstart=()=>fin(true);
+    u.onend=u.onerror=()=>{if(btn)btn.classList.remove("playing");fin(false);};
+    if(btn)btn.classList.add("playing");
+    setTimeout(()=>fin(true),800);   // onstart が来ない端末への保険
+    synth.speak(u);
+  });
 }
+// 読み上げる。鳴り始めたら解決する Promise を返す（制限時間を音声に合わせて始めるため）
 function speak(text,btn){
   const clean=cleanSpeechText(text);
-  if(!clean)return;
+  if(!clean)return Promise.resolve(false);
   const now=Date.now();
   // 直前と同じ発話が短時間に重なると音が二重（大きく聞こえる）になるのを防ぐ
-  if(clean===_lastSpeak.text && now-_lastSpeak.at<400)return;
+  if(clean===_lastSpeak.text && now-_lastSpeak.at<400)return Promise.resolve(false);
   _lastSpeak={text:clean,at:now};
   if(cloudReady()){
     if(synth)synth.cancel();
-    cloudSpeak(clean,btn).then(ok=>{if(!ok)deviceSpeak(clean,btn);});   // 失敗時は端末音声で読む
-    return;
+    return cloudSpeak(clean,btn).then(ok=>ok?true:deviceSpeak(clean,btn));   // 失敗時は端末音声で読む
   }
-  deviceSpeak(clean,btn);
+  return deviceSpeak(clean,btn);
 }
 function stopSpeak(){
   if(synth){synth.cancel();}
@@ -1004,6 +1011,16 @@ function stopSpeak(){
 const TTS_API="https://texttospeech.googleapis.com/v1";
 let ttsAudio=null,ttsAudioUnlocked=false,ttsPlayToken=0,ttsBtn=null,ttsObjUrl=null;
 const ttsMem=new Map();                 // メモリ内キャッシュ（key→base64）
+const ttsUrls=new Map();                // 再生用URLのキャッシュ（毎回の変換を省いてすぐ鳴らす）
+function ttsUrlFor(text,b64){
+  const k=ttsCacheKey(text);
+  let u=ttsUrls.get(k);
+  if(!u){
+    u=b64ToBlobUrl(b64);ttsUrls.set(k,u);
+    if(ttsUrls.size>60){const [ok,ou]=ttsUrls.entries().next().value;if(ou!==(ttsAudio&&ttsAudio.src))URL.revokeObjectURL(ou);ttsUrls.delete(ok);}
+  }
+  return u;
+}
 let ttsLastErr={msg:"",at:0};
 function cloudReady(){return !!(SETTINGS.cloudTTS&&SETTINGS.cloudKey&&SETTINGS.cloudVoice);}
 function ttsCacheKey(text,voice){return (voice||SETTINGS.cloudVoice)+"|"+text;}
@@ -1110,9 +1127,10 @@ async function ttsGet(text){
   return hit;
 }
 function ttsPrefetch(text){
-  if(!cloudReady())return;
+  if(!cloudReady())return Promise.resolve();
   const clean=cleanSpeechText(text);
-  if(clean)ttsGet(clean).catch(()=>{});
+  if(!clean)return Promise.resolve();
+  return ttsGet(clean).then(b64=>{ttsUrlFor(clean,b64);}).catch(()=>{});   // 再生用URLまで用意しておく
 }
 async function cloudSpeak(clean,btn){
   const token=++ttsPlayToken;
@@ -1122,9 +1140,7 @@ async function cloudSpeak(clean,btn){
   if(token!==ttsPlayToken)return true;          // 別の再生や停止が入った
   const a=getTtsAudio();
   try{a.pause();}catch(e){}
-  if(ttsObjUrl){URL.revokeObjectURL(ttsObjUrl);ttsObjUrl=null;}
-  ttsObjUrl=b64ToBlobUrl(b64);
-  a.src=ttsObjUrl;
+  a.src=ttsUrlFor(clean,b64);
   const rate=SETTINGS.speechRate||0.92;
   a.defaultPlaybackRate=rate;a.playbackRate=rate;a.volume=1;
   if(ttsBtn&&ttsBtn!==btn)ttsBtn.classList.remove("playing");
@@ -1258,6 +1274,7 @@ function startTimer(onExpire,sec){
 }
 function startQuiz(queue,label,chosenMode,returnTo){
   session={queue,label,chosenMode,returnTo,idx:0,score:0,total:queue.length,wrong:[],answered:false};
+  for(const it of queue.slice(1,3))ttsPrefetch(it.question);   // 最初の数問の音声を先に用意
   renderQ();
 }
 function quitQuiz(){
@@ -1388,17 +1405,30 @@ function renderQ(){
     // 2段階ゲート：わかる / わからない を選んでから選択肢を表示
     $("#gKnow").onclick=()=>{stopTimer();$("#gate").remove();renderOpts(false);};
     $("#gUnknown").onclick=()=>{stopTimer();$("#gate").remove();renderOpts(true);};
-    // ゲート段階の制限時間：時間切れで自動的に「わからない」へ
-    if(SETTINGS.timed)startTimer(()=>{const g=$("#gate");if(g)g.remove();renderOpts(true);},stageSec("gate"));
   }else{
     renderOpts(false);
+  }
+  // ゲート段階の制限時間：時間切れで自動的に「わからない」へ。
+  // 自動読み上げがあるときは、音声が鳴り始めた瞬間からカウントする（読み込みの待ち時間を引かれないように）
+  const willSpeak=speakWord!==null&&SETTINGS.autoPlay&&!suppressAutoSpeak;
+  const qs=session,qi=qs.idx;
+  const startGate=()=>{
+    if(session!==qs||qs.idx!==qi||qs.answered||!$("#gate"))return;   // もう答えた・次の問題に進んだ
+    startTimer(()=>{const g=$("#gate");if(g)g.remove();renderOpts(true);},stageSec("gate"));
+  };
+  let gateStarted=false;const startGateOnce=()=>{if(!gateStarted){gateStarted=true;startGate();}};
+  if(mode==="en2ja"&&SETTINGS.timed){
+    if(willSpeak)setTimeout(startGateOnce,1500);   // 音声が来ないときも1.5秒で始める
+    else startGateOnce();
   }
   if(speakWord!==null){
     const sp=$("#speak");
     sp.onclick=()=>speak(speakWord,sp);
     // タブ切替でのタブ復帰時は自動読み上げしない（同じ問題が鳴り直す・音量が大きくなるのを防ぐ）
-    if(SETTINGS.autoPlay&&!suppressAutoSpeak)setTimeout(()=>speak(speakWord,sp),350);
-    {const nx=session.queue[session.idx+1];if(nx)setTimeout(()=>ttsPrefetch(nx.question),1000);}
+    const nextTwo=()=>{for(const nx of session.queue.slice(session.idx+1,session.idx+3))ttsPrefetch(nx.question);};
+    if(willSpeak){
+      speak(speakWord,sp).then(()=>{if(mode==="en2ja"&&SETTINGS.timed)startGateOnce();nextTwo();});
+    }else nextTwo();
     suppressAutoSpeak=false;
     const ab=$("#autoBtn");
     if(ab)ab.onclick=async()=>{SETTINGS.autoPlay=!SETTINGS.autoPlay;await DB.put("kv","settings",SETTINGS);
