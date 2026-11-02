@@ -341,6 +341,29 @@
   .meta-theme{color:var(--gold);font-family:'Noto Sans JP';font-size:12px;letter-spacing:0;
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .chip-n{opacity:.6;font-size:.9em;margin-left:2px;}
+  .sec-block{display:flex;flex-direction:column;gap:8px;}
+  .sec-sub{display:flex;justify-content:space-between;align-items:center;gap:10px;}
+  .sec-sub .row-sub{min-width:0;}
+  .sec-expand{flex:none;border:1px solid var(--line);background:var(--panel-2);color:var(--gold);border-radius:99px;
+    font-family:'Noto Sans JP';font-size:12px;font-weight:700;padding:7px 12px;cursor:pointer;}
+  .sec-expand[aria-expanded="true"]{border-color:var(--gold);}
+  .theme-list{display:flex;flex-direction:column;gap:6px;margin:0 0 6px 12px;padding-left:10px;border-left:2px solid var(--line);}
+  .theme-row{width:100%;text-align:left;background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    padding:10px 12px;color:var(--ink);font-family:'Noto Sans JP';cursor:pointer;display:flex;flex-direction:column;gap:7px;}
+  .theme-row:active{border-color:var(--gold);}
+  .th-top{display:flex;align-items:center;gap:10px;}
+  .th-name{flex:1;min-width:0;font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .th-meta{flex:none;font-size:12px;color:var(--sub);}
+  .th-meta b{font-family:'Archivo';font-weight:800;margin-left:8px;}
+  .th-bar .mbar{height:6px;margin:0;}
+  .theme-pick{margin:14px 0 4px;}
+  .theme-sum{width:100%;display:flex;align-items:center;gap:10px;background:var(--panel);border:1px solid var(--line);
+    border-radius:14px;padding:13px 14px;color:var(--ink);font-family:'Noto Sans JP';cursor:pointer;text-align:left;}
+  .ts-label{flex:none;font-size:12px;color:var(--sub);}
+  .ts-text{flex:1;min-width:0;font-size:14px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .ts-act{flex:none;font-size:12px;color:var(--gold);font-weight:700;}
+  .theme-chips{margin-top:10px;}
+  .ts-clear{color:var(--sub);}
   .flash-bridge{display:block;margin:14px auto 0;background:none;border:1px solid var(--line);border-radius:12px;
     color:var(--gold);font-family:'Noto Sans JP';font-size:14px;font-weight:700;padding:12px 18px;cursor:pointer;}
   .flash-bridge:active{border-color:var(--gold);}
@@ -1864,9 +1887,10 @@ function renderStudyRoot(){
   });
   document.querySelectorAll(".row[data-book]").forEach(r=>r.onclick=()=>renderSections(decodeURIComponent(r.dataset.book)));
 }
-function sectionMastery(book,sec){
+function sectionMastery(book,sec){return masteryOf(itemsOf(book,sec,null));}
+function masteryOf(items){
   const counts=[0,0,0,0,0];const seen=new Set();
-  for(const it of itemsOf(book,sec,null)){
+  for(const it of items){
     const k=wordKey(it);if(seen.has(k))continue;seen.add(k);
     const st=statusOf(getProg(k));
     if(st===0)counts[0]++;else if(st==="review")counts[1]++;else counts[st+1]++;
@@ -1874,7 +1898,41 @@ function sectionMastery(book,sec){
   const tot=counts.reduce((a,b)=>a+b,0);
   return {counts,tot,pct:tot?Math.round(counts[4]/tot*100):0};
 }
+// 小テーマのあるセクションを開いた状態（画面を移っても覚えておく）
+const expandedSecs=new Set();
+// セクションの下に開く、小テーマごとの進捗の一覧
+function themeListHTML(items,key,showBars){
+  const themes=themesOf(items);
+  return `<div class="theme-list" id="tl-${key}" style="${expandedSecs.has(key)?"":"display:none"}">
+    ${themes.map(t=>{const ti=items.filter(d=>d.theme===t);const m=masteryOf(ti);
+      return `<button class="theme-row" data-key="${key}" data-thr="${encodeURIComponent(t)}">
+        <span class="th-top"><span class="th-name">${esc(t)}</span>
+          <span class="th-meta">${ti.length}語${showBars?`<b style="color:${pctColorOf(m.pct)}">${m.pct}%</b>`:""}</span>
+          <span class="row-arrow">›</span></span>
+        ${showBars?`<span class="th-bar">${masteryBarHTML(m.counts,"")}</span>`:""}
+      </button>`;}).join("")}
+  </div>`;
+}
+function expandBtnHTML(key,n){
+  const open=expandedSecs.has(key);
+  return `<button class="sec-expand" data-exp="${key}" aria-expanded="${open}">小テーマ ${n} ${open?"▴":"▾"}</button>`;
+}
+// 開く／閉じる（画面を描き直さないのでスクロール位置は動かない）
+function bindSectionExpand(onTheme){
+  document.querySelectorAll(".sec-expand").forEach(b=>b.onclick=e=>{
+    e.stopPropagation();
+    const key=b.dataset.exp,list=$("#tl-"+key);
+    const open=!expandedSecs.has(key);
+    if(open)expandedSecs.add(key);else expandedSecs.delete(key);
+    if(list)list.style.display=open?"":"none";
+    b.setAttribute("aria-expanded",open);
+    b.textContent=b.textContent.replace(/[▾▴]$/,open?"▴":"▾");
+  });
+  document.querySelectorAll(".theme-row").forEach(r=>r.onclick=()=>onTheme(r.dataset.key,decodeURIComponent(r.dataset.thr)));
+}
+function secKey(prefix,book,sec){return prefix+(book+"␟"+sec).split("").reduce((h,c)=>((h*31+c.charCodeAt(0))>>>0),7).toString(36);}
 function renderSections(book){
+  const keyToSec={};
   screen.innerHTML=`
     <div class="navbar"><button class="back" id="bk">← 教材</button><div class="nav-title"><b>${esc(book)}</b></div></div>
     <div class="lt" style="font-size:22px">セクションを選ぶ</div>
@@ -1884,44 +1942,77 @@ function renderSections(book){
       ${sectionsOf(book).map(sec=>{
         const its=itemsOf(book,sec,null);
         const m=sectionMastery(book,sec);
-        const pctColor=pctColorOf(m.pct);
-        return `<button class="row sec-row" data-sec="${encodeURIComponent(sec)}">
+        const nth=themesOf(its).length;
+        const key=secKey("s",book,sec);keyToSec[key]=sec;
+        return `<div class="sec-block">
+          <div class="row sec-row" role="button" data-sec="${encodeURIComponent(sec)}">
           <div class="row-main">
             <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px">
               <div class="row-title">${esc(sec)}</div>
-              <div style="font-family:'Archivo';font-size:13px;font-weight:800;color:${pctColor};flex:none">${m.pct}%</div>
+              <div class="pct-tag" style="color:${pctColorOf(m.pct)}">${m.pct}%</div>
             </div>
-            <div class="mbar" style="margin:9px 0 5px">${m.counts.map((n,i)=>`<div style="flex:${Math.max(n,0.001)};background:${BAR_COLORS[i]}"></div>`).join("")}</div>
-            <div class="row-sub">${its.length} 問${themesOf(its).length?` · ${themesOf(its).length} テーマ`:""} · マスター ${m.counts[4]}／${m.tot}</div>
-          </div></button>`;}).join("")}
+            ${masteryBarHTML(m.counts,"margin:9px 0 5px")}
+            <div class="sec-sub"><span class="row-sub">${its.length} 問 · マスター ${m.counts[4]}／${m.tot}</span>${nth?expandBtnHTML(key,nth):""}</div>
+          </div></div>
+          ${nth?themeListHTML(its,key,true):""}
+        </div>`;}).join("")}
     </div>`;
   $("#bk").onclick=renderStudyRoot;
   document.querySelectorAll(".row[data-sec]").forEach(r=>r.onclick=()=>renderRange(book,decodeURIComponent(r.dataset.sec)));
+  bindSectionExpand((key,theme)=>renderRange(book,keyToSec[key],[theme]));   // 小テーマを選んだ状態で出題範囲へ
 }
 function statusKeyOf(it){
   const s=statusOf(getProg(wordKey(it)));
   return s===0?"new":s==="review"?"review":("l"+s);  // new,review,l1,l2,l3
 }
 // 小テーマの絞り込み（複数選択可）。小テーマがない教材では何も出さない
+// 小テーマの絞り込み（複数選択可）。ふだんは1行にたたみ、「変更」で開く
+function themeSummary(sel,n){
+  if(!sel.size)return `すべて（${n}）`;
+  const a=[...sel];
+  return a.length<=2?a.join("・"):`${a.slice(0,2).join("・")} ほか${a.length-2}`;
+}
 function themeChipsHTML(themes,items,sel){
   if(!themes.length)return "";
-  return `<div class="divider"><span>小テーマでしぼる（複数選択可・未選択で全部）</span></div>
-    <div class="chips theme-chips">${themes.map(t=>{const n=items.filter(d=>d.theme===t).length;
-      return `<button class="filter-chip ${sel.has(t)?'on':''}" data-th="${encodeURIComponent(t)}">${esc(t)} <span class="chip-n">${n}</span></button>`;}).join("")}</div>`;
+  return `<div class="theme-pick">
+    <button class="theme-sum" id="themeSum" aria-expanded="false">
+      <span class="ts-label">小テーマ</span><span class="ts-text" id="themeSumText">${esc(themeSummary(sel,themes.length))}</span><span class="ts-act">変更 ▾</span>
+    </button>
+    <div class="chips theme-chips" id="themeChips" style="display:none">${themes.map(t=>{const n=items.filter(d=>d.theme===t).length;
+      return `<button class="filter-chip ${sel.has(t)?'on':''}" data-th="${encodeURIComponent(t)}">${esc(t)} <span class="chip-n">${n}</span></button>`;}).join("")}
+      ${`<button class="filter-chip ts-clear" id="themeClear">選択を解除</button>`}</div>
+  </div>`;
 }
 function bindThemeChips(sel,after){
+  const n=document.querySelectorAll("[data-th]").length;
+  const sum=$("#themeSum"),box=$("#themeChips"),txt=$("#themeSumText");
+  const total=()=>txt?txt.dataset.total:0;
+  const upd=()=>{if(txt)txt.textContent=themeSummary(sel,+txt.dataset.total||n);};
+  if(txt)txt.dataset.total=n;
+  if(sum)sum.onclick=()=>{
+    const open=box.style.display==="none";
+    box.style.display=open?"":"none";
+    sum.setAttribute("aria-expanded",open);
+    sum.querySelector(".ts-act").textContent=open?"閉じる ▴":"変更 ▾";
+  };
   document.querySelectorAll("[data-th]").forEach(ch=>ch.onclick=()=>{
     const t=decodeURIComponent(ch.dataset.th);
     if(sel.has(t))sel.delete(t);else sel.add(t);
     ch.classList.toggle("on");
-    after();
+    upd();after();
   });
+  const cl=$("#themeClear");
+  if(cl)cl.onclick=()=>{
+    sel.clear();
+    document.querySelectorAll("[data-th]").forEach(ch=>ch.classList.remove("on"));
+    upd();after();
+  };
 }
-function renderRange(book,sec){
+function renderRange(book,sec,preThemes){
   const cats=categoriesOf(book,sec);
   const total=itemsOf(book,sec,null).length;
   const themes=themesOf(itemsOf(book,sec,null));
-  let selThemes=new Set();         // 選択中の小テーマ（空＝全体）
+  let selThemes=new Set(preThemes||[]);   // 選択中の小テーマ（空＝全体）
   let selected=new Set();          // 選択中の品詞（空＝全体）
   let selStatus=new Set();         // 選択中の習熟度（空＝すべて）複数選択可
   let limit=0;                     // 0=全部
@@ -1958,7 +2049,7 @@ function renderRange(book,sec){
       <div class="count-chip" data-lim="20">20問</div>
       <div class="count-chip" data-lim="10">10問</div>
     </div>
-    <button class="btn primary" id="start" style="margin-top:20px">この範囲で学習（<span id="cnt">${total}</span>問）</button>
+    <button class="btn primary" id="start" style="margin-top:20px">この範囲で学習（<span id="cnt">${countItems().length}</span>問）</button>
     <button class="btn ghost" id="toFlashSec" style="margin-top:10px">このセクションを単語帳でめくる</button>`;
   $("#bk").onclick=()=>renderSections(book);
   bindThemeChips(selThemes,()=>refresh());
@@ -1992,7 +2083,7 @@ function renderRange(book,sec){
     const stLabel=selStatus.size?" · "+statusOpts.filter(o=>selStatus.has(o[0])).map(o=>o[1]).join("・"):"";
     const thLabel=selThemes.size?" · "+[...selThemes].join("・"):"";
     const label=(selected.size===0?(selThemes.size?sec:`${sec}（全体）`):`${sec} · ${[...selected].join("・")}`)+thLabel+stLabel;
-    renderFormSelect(base,label,()=>renderRange(book,sec));
+    renderFormSelect(base,label,()=>renderRange(book,sec,[...selThemes]));
   };
 }
 
@@ -2515,14 +2606,14 @@ function bindGaugeToggle(rerender){
     DB.put("kv","settings",SETTINGS).catch(()=>{});
   };
 }
-function gaugeRowMain(title,m,sub){
+function gaugeRowMain(title,m,sub,extra){
   return `<div class="row-main">
     <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px">
       <div class="row-title">${esc(title)}</div>
       <div class="pct-tag" style="color:${pctColorOf(m.pct)}">${m.pct}%</div>
     </div>
     ${masteryBarHTML(m.counts,"margin:9px 0 5px")}
-    <div class="row-sub">${sub} · マスター ${m.counts[4]}／${m.tot}</div>
+    <div class="sec-sub"><span class="row-sub">${sub} · マスター ${m.counts[4]}／${m.tot}</span>${extra||""}</div>
   </div>`;
 }
 function bookTotalCardHTML(book){
@@ -2556,6 +2647,7 @@ function renderFlashBooks(){
   document.querySelectorAll(".row[data-book]").forEach(r=>r.onclick=()=>renderFlashSections(decodeURIComponent(r.dataset.book)));
 }
 function renderFlashSections(book){
+  const keyToSec={};
   screen.innerHTML=`
     <div class="navbar"><button class="back" id="bk">← 教材</button><div class="nav-title"><b>${esc(book)}</b></div></div>
     <div class="lt" style="font-size:22px">セクションを選ぶ</div>
@@ -2570,13 +2662,20 @@ function renderFlashSections(book){
         const its=itemsOf(book,sec,null);
         const ck=its.filter(it=>isChecked(it)).length;
         const nth=themesOf(its).length;
-        const sub=`${its.length} 問${nth?` · ${nth} テーマ`:""}${ck?` · ★ ${ck}`:""}`;
-        return `<button class="row" data-sec="${encodeURIComponent(sec)}">
-          ${SETTINGS.flashGauge?gaugeRowMain(sec,sectionMastery(book,sec),sub):`<div class="row-main"><div class="row-title">${esc(sec)}</div>
-          <div class="row-sub">${sub}</div></div>
-          <div class="row-arrow">→</div>`}</button>`;}).join("")}
+        const key=secKey("f",book,sec);keyToSec[key]=sec;
+        const sub=`${its.length} 問${ck?` · ★ ${ck}`:""}`;
+        const exp=nth?expandBtnHTML(key,nth):"";
+        return `<div class="sec-block"><div class="row" role="button" data-sec="${encodeURIComponent(sec)}">
+          ${SETTINGS.flashGauge?gaugeRowMain(sec,sectionMastery(book,sec),sub,exp):`<div class="row-main"><div class="row-title">${esc(sec)}</div>
+          <div class="sec-sub"><span class="row-sub">${sub}</span>${exp}</div></div>
+          ${nth?"":`<div class="row-arrow">→</div>`}`}</div>
+          ${nth?themeListHTML(its,key,SETTINGS.flashGauge):""}</div>`;}).join("")}
     </div>`;
   bindGaugeToggle(()=>renderFlashSections(book));
+  bindSectionExpand((key,theme)=>{
+    const sec=keyToSec[key];
+    renderFlashStart(itemsOf(book,sec,null).filter(d=>d.theme===theme),`${sec} · ${theme}`,()=>renderFlashSections(book));
+  });
   $("#bk").onclick=renderFlashBooks;
   $("#all").onclick=()=>renderFlashStart(itemsOf(book,null,null),book,()=>renderFlashSections(book));
   document.querySelectorAll(".row[data-sec]").forEach(r=>r.onclick=()=>{
