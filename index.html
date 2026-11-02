@@ -336,7 +336,11 @@
     background:linear-gradient(90deg,var(--green) 0 35%,var(--gold) 35% 60%,var(--blue) 60% 80%,#3a3f4a 80%);opacity:.45;}
   .gauge-toggle.on{border-color:var(--gold);color:var(--gold);}
   .gauge-toggle.on::before{opacity:1;}
-  .meta-right{display:inline-flex;align-items:center;gap:8px;}
+  .meta-right{display:inline-flex;align-items:center;gap:8px;flex:none;}
+  .meta-left{display:inline-flex;align-items:center;gap:10px;min-width:0;}
+  .meta-theme{color:var(--gold);font-family:'Noto Sans JP';font-size:12px;letter-spacing:0;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .chip-n{opacity:.6;font-size:.9em;margin-left:2px;}
   .flash-bridge{display:block;margin:14px auto 0;background:none;border:1px solid var(--line);border-radius:12px;
     color:var(--gold);font-family:'Noto Sans JP';font-size:14px;font-weight:700;padding:12px 18px;cursor:pointer;}
   .flash-bridge:active{border-color:var(--gold);}
@@ -641,6 +645,26 @@ async function createSection(book,section){
   await syncLibrary();
   return true;
 }
+// 取り込み済みの教材のセクション名に付いた小テーマを分ける（習熟度は単語ごとなのでそのまま）
+async function migrateThemedSections(){
+  let any=false;
+  for(const b of LIBRARY){
+    const renamed=splitThemedSections(b.items);
+    if(!renamed.size)continue;
+    any=true;
+    b.sections=uniq((b.sections||[]).map(sec=>renamed.has(sec)?renamed.get(sec).pre:sec));
+    // マイリストの条件も合わせる（そのセクション → Part＋小テーマ）
+    for(const ml of MYLISTS){
+      const secs=ml.sections||[];let hit=false;
+      ml.sections=uniq(secs.map(q=>{const [bk,sec]=q.split("\u241f");
+        if(bk===b.name&&renamed.has(sec)){hit=true;const r=renamed.get(sec);
+          ml.themes=uniq([...(ml.themes||[]),r.theme]);return bk+"\u241f"+r.pre;}
+        return q;}));
+    }
+  }
+  if(any){await syncLibrary();await DB.put("kv","mylists",MYLISTS);}
+  return any;
+}
 // 旧マイ単語帳（別枠 mywords）を普通の教材へ移行する
 async function migrateMyWords(){
   const old=await DB.get("kv","mywords");
@@ -732,6 +756,8 @@ function rowsToItems(rows){
     const exAns=get("example_answer");
     out.push({
       book:get("book")||"未分類",section:normalizeSection(get("section")||"その他"),
+      theme:get("theme")||get("小テーマ")||get("subsection")||get("topic"),   // 小テーマ（任意）
+      tag:get("tag"),
       type:(get("type")||"word").toLowerCase(),category:get("category")||"その他",
       question:slashToSpace(q),answer:slashToSpace(a),
       choices:[get("choice1"),get("choice2"),get("choice3")].map(slashToSpace).filter(x=>x),
@@ -740,16 +766,32 @@ function rowsToItems(rows){
       exampleAnswer:String(exAns||"").replace(/\s*\/\s*/g," / ").replace(/\s+/g," ").trim()
     });
   }
+  splitThemedSections(out);   // 「Part 1 感謝・謝罪」のような列は、セクション「Part 1」＋小テーマに分ける
   return out;
 }
+// セクション名に小テーマが付いている教材（例：Part 1 意見・主張・提案 / Part 1 感謝・謝罪 …）を
+// セクション「Part 1」と小テーマに分ける。同じ「Part 1」に2種類以上の続きがあるときだけ分ける
+const THEMED_SEC=/^((?:part|section|unit|chapter|lesson|stage|day|第)\s*[0-9０-９]+(?:章|部|回)?)[\s　:：\-－]+(\S.*)$/i;
+function splitThemedSections(items){
+  const groups=new Map();
+  const parse=it=>{if(it.theme)return null;const m=String(it.section||"").match(THEMED_SEC);
+    return m?{pre:m[1].replace(/\s+/g," ").trim(),theme:m[2].trim()}:null;};
+  for(const it of items){const r=parse(it);if(!r)continue;
+    if(!groups.has(r.pre))groups.set(r.pre,new Set());groups.get(r.pre).add(r.theme);}
+  const renamed=new Map();   // 元のセクション名 → {pre,theme}
+  for(const it of items){const r=parse(it);if(!r||groups.get(r.pre).size<2)continue;
+    renamed.set(it.section,r);it.section=r.pre;it.theme=r.theme;}
+  return renamed;
+}
+function themesOf(items){return uniq(items.map(d=>d.theme).filter(t=>t));}
 function loadCSVText(text){return rowsToItems(parseCSV(text).filter(r=>r.length>1&&r.some(c=>String(c).trim()!=="")));}
 function itemsToCSV(items){
-  const head=["id","book","section","type","category","question","answer","choice1","choice2","choice3","note","example","example_ja","example_answer"];
+  const head=["id","book","section","type","category","question","answer","choice1","choice2","choice3","note","example","example_ja","example_answer","theme","tag"];
   const cell=v=>{v=String(v??"");return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;};
   const lines=[head.join(",")];
   items.forEach((it,i)=>{
     lines.push([i+1,it.book,it.section,it.type,it.category,it.question,it.answer,
-      it.choices[0]||"",it.choices[1]||"",it.choices[2]||"",it.note||"",it.example||"",it.exampleJa||"",it.exampleAnswer||""].map(cell).join(","));
+      it.choices[0]||"",it.choices[1]||"",it.choices[2]||"",it.note||"",it.example||"",it.exampleJa||"",it.exampleAnswer||"",it.theme||"",it.tag||""].map(cell).join(","));
   });
   return lines.join("\n");
 }
@@ -1850,7 +1892,7 @@ function renderSections(book){
               <div style="font-family:'Archivo';font-size:13px;font-weight:800;color:${pctColor};flex:none">${m.pct}%</div>
             </div>
             <div class="mbar" style="margin:9px 0 5px">${m.counts.map((n,i)=>`<div style="flex:${Math.max(n,0.001)};background:${BAR_COLORS[i]}"></div>`).join("")}</div>
-            <div class="row-sub">${its.length} 問 · マスター ${m.counts[4]}／${m.tot}</div>
+            <div class="row-sub">${its.length} 問${themesOf(its).length?` · ${themesOf(its).length} テーマ`:""} · マスター ${m.counts[4]}／${m.tot}</div>
           </div></button>`;}).join("")}
     </div>`;
   $("#bk").onclick=renderStudyRoot;
@@ -1860,14 +1902,32 @@ function statusKeyOf(it){
   const s=statusOf(getProg(wordKey(it)));
   return s===0?"new":s==="review"?"review":("l"+s);  // new,review,l1,l2,l3
 }
+// 小テーマの絞り込み（複数選択可）。小テーマがない教材では何も出さない
+function themeChipsHTML(themes,items,sel){
+  if(!themes.length)return "";
+  return `<div class="divider"><span>小テーマでしぼる（複数選択可・未選択で全部）</span></div>
+    <div class="chips theme-chips">${themes.map(t=>{const n=items.filter(d=>d.theme===t).length;
+      return `<button class="filter-chip ${sel.has(t)?'on':''}" data-th="${encodeURIComponent(t)}">${esc(t)} <span class="chip-n">${n}</span></button>`;}).join("")}</div>`;
+}
+function bindThemeChips(sel,after){
+  document.querySelectorAll("[data-th]").forEach(ch=>ch.onclick=()=>{
+    const t=decodeURIComponent(ch.dataset.th);
+    if(sel.has(t))sel.delete(t);else sel.add(t);
+    ch.classList.toggle("on");
+    after();
+  });
+}
 function renderRange(book,sec){
   const cats=categoriesOf(book,sec);
   const total=itemsOf(book,sec,null).length;
+  const themes=themesOf(itemsOf(book,sec,null));
+  let selThemes=new Set();         // 選択中の小テーマ（空＝全体）
   let selected=new Set();          // 選択中の品詞（空＝全体）
   let selStatus=new Set();         // 選択中の習熟度（空＝すべて）複数選択可
   let limit=0;                     // 0=全部
   const countItems=()=>{
     let base=selected.size===0?itemsOf(book,sec,null):itemsOf(book,sec,null).filter(d=>selected.has(d.category));
+    if(selThemes.size)base=base.filter(d=>selThemes.has(d.theme));
     if(selStatus.size)base=base.filter(d=>selStatus.has(statusKeyOf(d)));
     return base;
   };
@@ -1876,6 +1936,8 @@ function renderRange(book,sec){
     <div class="navbar"><button class="back" id="bk">← セクション</button><div class="nav-title"><b>${esc(sec)}</b></div></div>
     <div class="lt" style="font-size:22px">出題範囲を選ぶ</div>
     <div class="lt-sub">${esc(book)} · 品詞は複数選べます（未選択で全体）</div>
+    ${themeChipsHTML(themes,itemsOf(book,sec,null),selThemes)}
+    ${themes.length?`<div class="divider"><span>品詞でしぼる（複数選択可・未選択で全部）</span></div>`:""}
     <div class="grid2" id="catGrid">
       ${cats.map(cat=>{
         const n=itemsOf(book,sec,cat).length;
@@ -1899,6 +1961,7 @@ function renderRange(book,sec){
     <button class="btn primary" id="start" style="margin-top:20px">この範囲で学習（<span id="cnt">${total}</span>問）</button>
     <button class="btn ghost" id="toFlashSec" style="margin-top:10px">このセクションを単語帳でめくる</button>`;
   $("#bk").onclick=()=>renderSections(book);
+  bindThemeChips(selThemes,()=>refresh());
   $("#toFlashSec").onclick=()=>goTab("myvocab",()=>renderFlashStart(itemsOf(book,sec,null),sec,()=>renderFlashSections(book)));
   const refresh=()=>{
     const base=countItems();
@@ -1927,7 +1990,8 @@ function renderRange(book,sec){
     if(limit>0)base=base.slice(0,limit);
     if(!base.length){toast("対象がありません");return;}
     const stLabel=selStatus.size?" · "+statusOpts.filter(o=>selStatus.has(o[0])).map(o=>o[1]).join("・"):"";
-    const label=(selected.size===0?`${sec}（全体）`:`${sec} · ${[...selected].join("・")}`)+stLabel;
+    const thLabel=selThemes.size?" · "+[...selThemes].join("・"):"";
+    const label=(selected.size===0?(selThemes.size?sec:`${sec}（全体）`):`${sec} · ${[...selected].join("・")}`)+thLabel+stLabel;
     renderFormSelect(base,label,()=>renderRange(book,sec));
   };
 }
@@ -1982,6 +2046,7 @@ function mylistItems(ml){
     (!secs.length||secs.includes(d.book+"\u241f"+d.section))&&
     (!ml.cats.length||ml.cats.includes(d.category))&&
     (!tags.length||tags.includes(d.tag||""))&&
+    (!(ml.themes||[]).length||ml.themes.includes(d.theme||""))&&
     (!ml.types.length||ml.types.includes(d.type))&&
     (!stats.length||stats.includes(statusKeyOf(d))));
 }
@@ -2377,6 +2442,7 @@ function renderWordEdit(bookIdx,wordIdx,backFn){
       <input id="eCustomPos" value="${esc(knownPos?'':(w.category||''))}" placeholder="品詞を自由入力"
         style="margin-top:9px;${(w.category&&!knownPos)?'':'display:none'}" autocapitalize="off">
     </div>
+    ${F("小テーマ","eTheme",w.theme,"例：感謝・謝罪（なければ空欄）")}
     ${F("分類タグ","eTag",w.tag,"例：授業 / 課題リスト")}
     ${F("メモ","eN",w.note,"")}
     ${F("例文","eE",w.example,"")}
@@ -2398,7 +2464,7 @@ function renderWordEdit(bookIdx,wordIdx,backFn){
     if(!v("#eQ")||!v("#eA")){toast("単語と訳は必須です");return;}
     const oldKey=wordKey(w);
     Object.assign(w,{question:v("#eQ"),answer:v("#eA"),
-      category:cat||v("#eCustomPos")||"",tag:v("#eTag"),
+      category:cat||v("#eCustomPos")||"",tag:v("#eTag"),theme:v("#eTheme"),
       note:v("#eN"),example:v("#eE"),exampleJa:v("#eEj")});
     await syncLibrary();
     await carryWordRecord(oldKey,wordKey(w));   // つづりを直しても習熟度を引き継ぐ
@@ -2503,7 +2569,8 @@ function renderFlashSections(book){
       ${sectionsOf(book).map(sec=>{
         const its=itemsOf(book,sec,null);
         const ck=its.filter(it=>isChecked(it)).length;
-        const sub=`${its.length} 問${ck?` · ★ ${ck}`:""}`;
+        const nth=themesOf(its).length;
+        const sub=`${its.length} 問${nth?` · ${nth} テーマ`:""}${ck?` · ★ ${ck}`:""}`;
         return `<button class="row" data-sec="${encodeURIComponent(sec)}">
           ${SETTINGS.flashGauge?gaugeRowMain(sec,sectionMastery(book,sec),sub):`<div class="row-main"><div class="row-title">${esc(sec)}</div>
           <div class="row-sub">${sub}</div></div>
@@ -2518,12 +2585,15 @@ function renderFlashSections(book){
 }
 function renderFlashStart(items,label,backFn){
   let cats=uniq(items.map(d=>d.category)).filter(c=>c);
+  const themes=themesOf(items);
+  let selThemes=new Set();    // 選択した小テーマ（空＝全部）
   let selCats=new Set();      // 選択した品詞（空＝全部）
   let selStatus=new Set();    // 選択中の習熟度（空＝すべて）複数選択可
   let dir="en2ja";
   const statusOpts=[["new","未学習"],["l1","学習中"],["review","つまずき"],["l2","定着中"],["l3","マスター"]];
   const pool=()=>{
     let base=items.slice();    // 固定順（登録順・教材順、シャッフルしない）
+    if(selThemes.size)base=base.filter(d=>selThemes.has(d.theme));
     if(selCats.size)base=base.filter(d=>selCats.has(d.category));
     if(selStatus.size)base=base.filter(d=>selStatus.has(statusKeyOf(d)));
     return base;
@@ -2532,7 +2602,8 @@ function renderFlashStart(items,label,backFn){
     screen.innerHTML=`
       <div class="navbar"><button class="back" id="bk">← 戻る</button><div class="nav-title"><b>${esc(label)}</b></div></div>
       <div class="lt" style="font-size:22px">単語帳の設定</div>
-      <div class="lt-sub">前後にめくって確認します。習熟度や品詞でしぼれます。</div>
+      <div class="lt-sub">前後にめくって確認します。${themes.length?"小テーマ・":""}習熟度や品詞でしぼれます。</div>
+      ${themeChipsHTML(themes,items,selThemes)}
       <div class="divider"><span>習熟度でしぼる（複数選択可・未選択で全部）</span></div>
       <div class="chips" id="statusChips">
         ${statusOpts.map(([k,lbl])=>{
@@ -2548,6 +2619,7 @@ function renderFlashStart(items,label,backFn){
       </div>
       <button class="btn primary" id="start" style="margin-top:20px">めくり始める（<span id="cnt">${pool().length}</span>枚）</button>`;
     $("#bk").onclick=backFn;
+    bindThemeChips(selThemes,()=>{$("#cnt").textContent=pool().length;});
     $("#dirEnJa").onclick=()=>{dir="en2ja";draw();};
     $("#dirJaEn").onclick=()=>{dir="ja2en";draw();};
     document.querySelectorAll("[data-st]").forEach(ch=>ch.onclick=()=>{
@@ -2601,7 +2673,7 @@ function renderFlashCard(){
       <button class="check-btn ${checked?'on':''}" id="checkBtn" aria-label="チェック">
         <svg viewBox="0 0 24 24" fill="${checked?'currentColor':'none'}" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
       </button></div>
-    <div class="flash-meta"><span>${String(fs.idx+1).padStart(2,'0')} / ${String(fs.cards.length).padStart(2,'0')}</span>
+    <div class="flash-meta"><span class="meta-left">${String(fs.idx+1).padStart(2,'0')} / ${String(fs.cards.length).padStart(2,'0')}${it.theme?`<span class="meta-theme">${esc(it.theme)}</span>`:""}</span>
       <span class="meta-right">${SETTINGS.flashGauge?statusBadgeShort(it):""}${checked?'<span style="color:var(--gold)">★ チェック中</span>':(SETTINGS.flashGauge?"":"めくり")}</span></div>
     <div class="track"><div style="width:${(fs.idx+1)/fs.cards.length*100}%"></div></div>
     <div style="height:14px"></div>
@@ -3354,6 +3426,7 @@ function renderEditorForm(idx,backQuery){
       <select id="ft">${["word","idiom","grammar","order"].map(t=>`<option value="${t}" ${it.type===t?"selected":""}>${t} — ${TYPE_LABEL[t]}</option>`).join("")}</select></div>
     ${F("教材（book）","fb",it.book)}
     ${F("セクション（section）","fs",it.section)}
+    ${F("小テーマ（theme・任意）","fth",it.theme||"")}
     ${F("品詞・分類（category）","fc",it.category)}
     ${F("選択肢1（任意）","fc1",it.choices[0]||"")}
     ${F("選択肢2（任意）","fc2",it.choices[1]||"")}
@@ -3368,7 +3441,7 @@ function renderEditorForm(idx,backQuery){
   $("#save").onclick=async()=>{
     const v=id=>$(id).value.trim();
     if(!v("#fq")||!v("#fa")){toast("英語と意味は必須です");return;}
-    const next={book:v("#fb")||"未分類",section:v("#fs")||"その他",
+    const next={book:v("#fb")||"未分類",section:v("#fs")||"その他",theme:v("#fth"),tag:isNew?"":(QUESTIONS[idx].tag||""),
       type:$("#ft").value,category:v("#fc")||"その他",
       question:v("#fq"),answer:v("#fa"),
       choices:[v("#fc1"),v("#fc2"),v("#fc3")].filter(x=>x),
@@ -3508,6 +3581,8 @@ $("#restoreInput").addEventListener("change",e=>{
     const ck=await DB.get("kv","check");if(ck)CHECK=ck;
     PROG=new Map(await DB.entries("progress"));
     rebuildQuestions();
+    // 取り込み済みの教材で「Part 1 感謝・謝罪」のようなセクションがあれば、小テーマに分ける
+    if(await migrateThemedSections())setTimeout(()=>toast("小テーマごとのセクションを、セクションと小テーマに整理しました"),900);
     // 旧マイ単語帳（別枠）があれば、普通の教材へ移行する
     const migrated=await migrateMyWords();
     if(migrated)setTimeout(()=>toast("マイ単語帳を教材として引き継ぎました"),600);
