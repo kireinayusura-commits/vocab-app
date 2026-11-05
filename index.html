@@ -343,6 +343,7 @@
   .fx-pad{flex:none;width:26px;}
   .fc-exlist:not(.multi) .fx-pad{display:none;}
   .col{color:var(--blue);}
+  .ng{color:#c07a76;opacity:.85;font-size:.92em;}
   .flash-card .fc-ex .col{color:#8cc4ff;}
   .auto-btn{display:inline-flex;align-items:center;gap:4px;background:none;border:1px solid var(--line);color:var(--sub);
     border-radius:10px;padding:8px 11px;font-size:12px;font-family:'Noto Sans JP',sans-serif;cursor:pointer;margin-right:8px;flex:none;}
@@ -1124,8 +1125,10 @@ if(synth){
   synth.onvoiceschanged=()=>{pickVoice();refreshVoiceUI();};
 }
 let _lastSpeak={text:"",at:0};
+// ［×various］（×avoid to do）のような「間違いの例」は読まない
+const NG_GROUP=/\s*[\[［(（]\s*[×✕✗][^\]］)）]*[\]］)）]/g;
 function cleanSpeechText(text){
-  return String(text||"").replace(/_{2,}/g," blank ").replace(/~/g," ").replace(/\s+/g," ").trim();
+  return String(text||"").replace(NG_GROUP," ").replace(/_{2,}/g," blank ").replace(/~/g," ").replace(/\s+/g," ").trim();
 }
 // 端末の音声（予備）で読み上げる
 // 端末の音声で読む。鳴り始めたら（または鳴らなかったら）解決する Promise を返す
@@ -1364,7 +1367,7 @@ async function jaCloudVoice(){
 }
 // 日本語の意味を読み上げ用に整える（〜は「なになに」と読む。英語だけの（to do）は省く）
 function jaSpeechClean(t){
-  let s=String(t||"").replace(/[〜~～]/g,"なになに");   // 〜を通り過ぎる → なになにを通り過ぎる
+  let s=String(t||"").replace(NG_GROUP,"").replace(/[〜~～]/g,"なになに");   // 〜を通り過ぎる → なになにを通り過ぎる
   for(let i=0;i<3;i++)s=s.replace(/[（(]([^（）()]*)[）)]/g,(m,x)=>/[ぁ-んァ-ヶ一-龠々]/.test(x)?x:"");
   return s.replace(/[［\[]([^］\]]*)[］\]]/g,"$1").replace(/[「」『』]/g,"").replace(/[①-⑳]/g,"、")
     .replace(/\s+/g," ").replace(/^[、。\s]+/,"").replace(/[、\s]+$/,"").trim();
@@ -1507,7 +1510,8 @@ function exItem(it,ex){return {...it,examples:undefined,example:ex.en,exampleJa:
 function exNo(list,i){return list[i].n||(list.length>1?CIRCLED[i]||String(i+1):"");}
 // ---- 例文の青字（本で青く印刷されている、いっしょに覚える語：be likely to の be・to など） ----
 // CSVでは {are} ____ {to} のように {} で囲む。{} がない古いデータは、頻出表現から自動で見つける
-function colHTML(h){return h.replace(/\{([^{}]*)\}/g,'<span class="col">$1</span>');}
+function colHTML(h){return h.replace(/\{([^{}]*)\}/g,'<span class="col">$1</span>')
+  .replace(/([\[［(（]\s*[×✕✗][^\]］)）]*[\]］)）])/g,'<span class="ng">$1</span>');}   // ×の例は控えめな色に
 const BE_FORMS=new Set(["be","am","is","are","was","were","been","being","'s","'re","'m"]);
 const COL_SKIP=new Set(["a","an","the","do","one's","oneself","sb","sth","s","v","o","c","b","人","物"]);
 function itemHasColMarks(src){return examplesOf(src).some(e=>/[{}]/.test(e.en));}
