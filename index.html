@@ -1129,9 +1129,12 @@ function cleanSpeechText(text){
 }
 // 端末の音声（予備）で読み上げる
 // 端末の音声で読む。鳴り始めたら（または鳴らなかったら）解決する Promise を返す
+function jaRate(){return +SETTINGS.jaSpeechRate||1;}
+function japaneseVoices(){return synth?synth.getVoices().filter(v=>/^ja/i.test(v.lang)):[];}
 function jaDeviceVoice(){
   if(!synth)return null;
-  const vs=synth.getVoices().filter(v=>/^ja/i.test(v.lang));
+  const vs=japaneseVoices();
+  if(SETTINGS.jaVoiceURI){const s=vs.find(v=>v.voiceURI===SETTINGS.jaVoiceURI);if(s)return s;}
   return vs.find(v=>/premium|enhanced|拡張/i.test(v.name))||vs.find(v=>/kyoko|o-ren/i.test(v.name))||vs[0]||null;
 }
 function deviceSpeak(clean,btn,opts){
@@ -1139,7 +1142,7 @@ function deviceSpeak(clean,btn,opts){
   if(!synth||!clean){if(opts.onEnd)opts.onEnd();return Promise.resolve(false);}
   synth.cancel();   // 前の発話を必ず止める（重なり防止）
   const u=new SpeechSynthesisUtterance(clean);
-  if(opts.lang==="ja"){const jv=jaDeviceVoice();if(jv)u.voice=jv;u.lang="ja-JP";u.rate=1;}
+  if(opts.lang==="ja"){const jv=jaDeviceVoice();if(jv)u.voice=jv;u.lang="ja-JP";u.rate=jaRate();}
   else{
     if(enVoice)u.voice=enVoice;
     u.lang=(enVoice&&enVoice.lang)||"en-US";
@@ -1315,7 +1318,7 @@ async function cloudSpeak(clean,btn,opts){
   const a=getTtsAudio();
   try{a.pause();}catch(e){}
   a.src=ttsUrlFor(clean,b64,voice);
-  const rate=SETTINGS.speechRate||0.92;
+  const rate=opts.rate||SETTINGS.speechRate||0.92;
   a.defaultPlaybackRate=rate;a.playbackRate=rate;a.volume=1;
   if(ttsBtn&&ttsBtn!==btn)ttsBtn.classList.remove("playing");
   ttsBtn=btn||null;
@@ -1331,21 +1334,32 @@ async function cloudSpeak(clean,btn,opts){
   catch(e){if(btn)btn.classList.remove("playing");return false;}   // 自動再生が拒否された等 → 端末音声へ
 }
 // 日本語の声（Google）：英語と同じ種類の声を ja-JP から選び、覚えておく
+// 英語の声と同じ種類（Chirp 3 HD なら同じ名前の話者）の日本語の声を選ぶ
+function pickJaVoiceLike(names){
+  const en=SETTINGS.cloudVoice||"";
+  const fam=["Chirp3-HD","Chirp-HD","Neural2","Wavenet","Standard"];
+  const myFam=fam.find(f=>en.includes(f));
+  const speaker=en.split("-").pop();
+  return (myFam&&names.find(n=>n.includes(myFam)&&n.endsWith("-"+speaker)))
+    ||(myFam&&names.find(n=>n.includes(myFam)))
+    ||fam.map(f=>names.find(n=>n.includes(f))).find(Boolean)||names[0]||null;
+}
+async function fetchJaVoiceList(){
+  const r=await fetch(`${TTS_API}/voices?languageCode=ja-JP&key=${encodeURIComponent(SETTINGS.cloudKey)}`);
+  if(!r.ok)return null;
+  const list=((await r.json()).voices||[]).filter(v=>/^ja-JP-/.test(v.name))
+    .map(v=>({name:v.name,lang:"ja-JP",gender:v.ssmlGender||""}))
+    .filter(v=>ttsTierOf(v.name)>=0)
+    .sort((a,b)=>ttsTierOf(a.name)-ttsTierOf(b.name)||a.name.localeCompare(b.name));
+  try{await DB.put("kv","cloudVoicesJa",list);}catch(e){}
+  return list;
+}
 async function jaCloudVoice(){
   if(SETTINGS.cloudVoiceJa)return SETTINGS.cloudVoiceJa;
   try{
-    const r=await fetch(`${TTS_API}/voices?languageCode=ja-JP&key=${encodeURIComponent(SETTINGS.cloudKey)}`);
-    if(!r.ok)return null;
-    const vs=((await r.json()).voices||[]).map(v=>v.name).filter(n=>/^ja-JP-/.test(n));
-    const en=SETTINGS.cloudVoice||"";
-    const fam=["Chirp3-HD","Chirp-HD","Neural2","Wavenet","Standard"];
-    const myFam=fam.find(f=>en.includes(f));
-    const speaker=en.split("-").pop();
-    const pick=(myFam&&vs.find(n=>n.includes(myFam)&&n.endsWith("-"+speaker)))
-      ||fam.map(f=>vs.find(n=>n.includes(f))).find(Boolean)||vs[0];
-    if(!pick)return null;
-    SETTINGS.cloudVoiceJa=pick;DB.put("kv","settings",SETTINGS).catch(()=>{});
-    return pick;
+    let list=null;try{list=await DB.get("kv","cloudVoicesJa");}catch(e){}
+    if(!list||!list.length)list=await fetchJaVoiceList();
+    return (list&&pickJaVoiceLike(list.map(v=>v.name)))||null;   // 「自動」は保存せず、英語の声が変わればそれに合わせる
   }catch(e){return null;}
 }
 // 日本語の意味を読み上げ用に整える（〜は「なになに」と読む。英語だけの（to do）は省く）
@@ -1383,7 +1397,7 @@ function speakWait(text,lang,btn){
     if(cloudReady()){
       if(synth)synth.cancel();
       (lang==="ja"?jaCloudVoice():Promise.resolve(SETTINGS.cloudVoice))
-        .then(v=>v?cloudSpeak(clean,btn,{voice:v,onEnd:end}):false)
+        .then(v=>v?cloudSpeak(clean,btn,{voice:v,onEnd:end,rate:lang==="ja"?jaRate():undefined}):false)
         .then(ok=>{if(!ok&&!done)deviceSpeak(clean,btn,{lang,onEnd:end});});
     }else deviceSpeak(clean,btn,{lang,onEnd:end});
   });
@@ -3648,6 +3662,7 @@ const TTS_TIERS=[
   [/Neural2/i,"高品質（Neural2）"],
   [/Wavenet/i,"標準（WaveNet）"]];
 const TTS_REGION={"en-US":"米国","en-GB":"英国","en-AU":"豪州"};
+const TTS_REGION_LABEL={...TTS_REGION,"ja-JP":"日本語"};
 function ttsTierOf(name){const t=TTS_TIERS.findIndex(([re])=>re.test(name));return t;}
 function cloudVoiceShortName(name){
   const m=name.match(/Chirp3?-HD-(.+)$/i);if(m)return m[1];
@@ -3655,7 +3670,7 @@ function cloudVoiceShortName(name){
 }
 function cloudVoiceLabel(v){
   const g=v.gender==="FEMALE"?"女性":v.gender==="MALE"?"男性":"";
-  const r=TTS_REGION[v.lang]||v.lang;
+  const r=TTS_REGION_LABEL[v.lang]||v.lang;
   return `${cloudVoiceShortName(v.name)}（${[g,r].filter(x=>x).join("・")}）`;
 }
 async function getCloudVoiceList(){let l=null;try{l=await DB.get("kv","cloudVoices");}catch(e){}return l||[];}
@@ -3672,6 +3687,30 @@ async function rebuildCloudVoiceOptions(){
     if(!vs.length)return "";
     return `<optgroup label="${label}">${vs.map(v=>`<option value="${esc(v.name)}" ${v.name===SETTINGS.cloudVoice?"selected":""}>${esc(cloudVoiceLabel(v))}</option>`).join("")}</optgroup>`;
   }).join("");
+}
+async function rebuildCloudJaOptions(){
+  const sel=$("#cloudVoiceJaSel");if(!sel)return;
+  let list=null;try{list=await DB.get("kv","cloudVoicesJa");}catch(e){}
+  if(!list||!list.length){
+    sel.innerHTML=SETTINGS.cloudVoiceJa?`<option value="${esc(SETTINGS.cloudVoiceJa)}">${esc(SETTINGS.cloudVoiceJa)}</option>`
+      :`<option value="">（声の一覧を読み込むと選べます）</option>`;
+    return;
+  }
+  sel.innerHTML=`<option value="" ${!SETTINGS.cloudVoiceJa?"selected":""}>自動（英語の声に合わせる）</option>`+TTS_TIERS.map(([re,label],ti)=>{
+    const vs=list.filter(v=>ttsTierOf(v.name)===ti);
+    if(!vs.length)return "";
+    return `<optgroup label="${label}">${vs.map(v=>`<option value="${esc(v.name)}" ${v.name===SETTINGS.cloudVoiceJa?"selected":""}>${esc(cloudVoiceLabel(v))}</option>`).join("")}</optgroup>`;
+  }).join("");
+}
+async function cloudTryJaVoice(btn){
+  if(!SETTINGS.cloudKey||!SETTINGS.cloudVoice){toast("先にAPIキーと声を設定してください");return;}
+  stopSpeak();
+  const v=await jaCloudVoice();
+  if(!v){toast("日本語の声が見つかりませんでした");return;}
+  const ok=await cloudSpeak(jaSpeechClean("他動詞。1、〜を通り過ぎる。2、〜を抜く。郵便局の前を通り過ぎる。"),btn,{voice:v,rate:jaRate()});
+  const st=$("#cloudStatus");
+  if(!ok&&st)st.innerHTML=`<span class="bad">${esc(ttsLastErr.msg||"再生できませんでした")}</span>`;
+  else refreshCloudStatus();
 }
 async function loadCloudVoiceList(){
   const st=$("#cloudStatus");
@@ -3697,7 +3736,9 @@ async function loadCloudVoiceList(){
     await DB.put("kv","settings",SETTINGS);
   }
   await rebuildCloudVoiceOptions();
-  toast(`声の一覧を読み込みました（${list.length}種類）`);
+  let ja=null;try{ja=await fetchJaVoiceList();}catch(e){}   // 日本語の声も一緒に
+  await rebuildCloudJaOptions();
+  toast(`声の一覧を読み込みました（英語 ${list.length}・日本語 ${ja?ja.length:0}種類）`);
   refreshCloudStatus();refreshBulkInfo();refreshCacheInfo();
 }
 async function refreshCloudStatus(){
@@ -3708,7 +3749,12 @@ async function refreshCloudStatus(){
   const v=list.find(x=>x.name===SETTINGS.cloudVoice);
   const used=await ttsUsageThisMonth();
   if(!$("#cloudStatus"))return;
-  st.innerHTML=`使用中の声：${esc(v?cloudVoiceLabel(v):SETTINGS.cloudVoice)}<br>今月の送信：${used.toLocaleString()} 文字（Google の無料枠の目安：高品質の声で月100万文字）`;
+  let jl=null;try{jl=await DB.get("kv","cloudVoicesJa");}catch(e){}
+  const jaName=SETTINGS.cloudVoiceJa||((jl&&jl.length)?pickJaVoiceLike(jl.map(x=>x.name)):"");
+  const jv=(jl||[]).find(x=>x.name===jaName);
+  const jaLabel=jv?cloudVoiceLabel(jv):(jaName||"自動");
+  if(!$("#cloudStatus"))return;
+  st.innerHTML=`使用中の声：英語 ${esc(v?cloudVoiceLabel(v):SETTINGS.cloudVoice)}／日本語 ${esc(SETTINGS.cloudVoiceJa?jaLabel:"自動・"+jaLabel)}<br>今月の送信：${used.toLocaleString()} 文字（Google の無料枠の目安：高品質の声で月100万文字）`;
 }
 async function cloudTryVoice(btn){
   const st=$("#cloudStatus");
@@ -3718,21 +3764,38 @@ async function cloudTryVoice(btn){
   if(!ok&&st)st.innerHTML=`<span class="bad">${esc(ttsLastErr.msg||"再生できませんでした")}</span>`;
   else refreshCloudStatus();
 }
-// 教材から「読み上げる文」を集める（単語・例文・並べ替えの答え）
-function ttsTextsFor(book){
-  const items=book?QUESTIONS.filter(d=>d.book===book):QUESTIONS;
-  const set=new Set();
-  for(const it of items){
-    const add=t=>{const c=cleanSpeechText(t);if(c)set.add(c);};
-    add(it.question);
-    for(const e of examplesOf(it))add(fillCloze(exItem(it,e)));
-    if(it.type==="order")add(it.answer);
-  }
-  return [...set];
+// まとめて作る音声の種類（設定で選ぶ）。初期値：英語はオン、日本語は自動めくりの設定に合わせる
+function bulkKinds(){
+  return {en:SETTINGS.bulkEn!==false,
+    ja:SETTINGS.bulkJa!=null?!!SETTINGS.bulkJa:SETTINGS.autoReadJa!==false,
+    jaEx:SETTINGS.bulkJaEx!=null?!!SETTINGS.bulkJaEx:!!SETTINGS.autoReadEx};
 }
-async function ttsMissing(texts){
+// 教材から「読み上げる文」を集める。{text, voice, lang}
+//   英語：単語・例文・並べ替えの答え／日本語：意味（自動めくりで読む形）・例文の訳
+async function ttsTextsFor(book,kinds){
+  kinds=kinds||bulkKinds();
+  const items=book?QUESTIONS.filter(d=>d.book===book):QUESTIONS;
+  const jaV=(kinds.ja||kinds.jaEx)?await jaCloudVoice():null;
+  const map=new Map();
+  const add=(t,lang)=>{
+    const c=lang==="ja"?jaSpeechClean(t):cleanSpeechText(t);
+    const v=lang==="ja"?jaV:SETTINGS.cloudVoice;
+    if(c&&v)map.set(ttsCacheKey(c,v),{text:c,voice:v,lang});
+  };
+  for(const it of items){
+    if(kinds.en){
+      add(it.question,"en");
+      for(const e of examplesOf(it))add(fillCloze(exItem(it,e)),"en");
+      if(it.type==="order")add(it.answer,"en");
+    }
+    if(kinds.ja)add(jaSpeechText(it),"ja");
+    if(kinds.jaEx)for(const e of examplesOf(it))if(e.ja)add(e.ja,"ja");
+  }
+  return [...map.values()];
+}
+async function ttsMissing(list){
   const out=[];
-  for(const t of texts){let hit=null;try{hit=await DB.get("audio",ttsCacheKey(t));}catch(e){}if(!hit)out.push(t);}
+  for(const t of list){let hit=null;try{hit=await DB.get("audio",ttsCacheKey(t.text,t.voice));}catch(e){}if(!hit)out.push(t);}
   return out;
 }
 let ttsBulk={running:false,abort:false,done:0,total:0,book:""};
@@ -3742,10 +3805,13 @@ async function refreshBulkInfo(){
   if(!SETTINGS.cloudVoice){box.textContent="";return;}
   const seq=++_bulkInfoSeq;
   const book=($("#bulkBook")||{}).value||"";
-  const miss=await ttsMissing(ttsTextsFor(book));
+  const k=bulkKinds();
+  if(!k.en&&!k.ja&&!k.jaEx){box.textContent="作る音声の種類を1つ以上選んでください。";return;}
+  const miss=await ttsMissing(await ttsTextsFor(book,k));
   if(seq!==_bulkInfoSeq||!$("#bulkInfo"))return;
-  const chars=miss.reduce((a,t)=>a+t.length,0);
-  box.textContent=miss.length?`未作成 ${miss.length} 件（約 ${chars.toLocaleString()} 文字）。作成しておくと、通信がなくても高品質の声で再生できます。`
+  const chars=miss.reduce((a,t)=>a+t.text.length,0);
+  const nEn=miss.filter(t=>t.lang==="en").length,nJa=miss.length-nEn;
+  box.textContent=miss.length?`未作成 ${miss.length} 件（英語 ${nEn}・日本語 ${nJa}／約 ${chars.toLocaleString()} 文字）。作成しておくと、通信がなくても高品質の声で再生できます。`
     :"この範囲の音声はすべて作成済みです。";
 }
 async function refreshCacheInfo(){
@@ -3768,9 +3834,11 @@ function paintBulk(){
 }
 async function runTtsBulk(book){
   if(!SETTINGS.cloudKey||!SETTINGS.cloudVoice){toast("先にAPIキーと声を設定してください");return;}
-  const miss=await ttsMissing(ttsTextsFor(book));
+  const k=bulkKinds();
+  if(!k.en&&!k.ja&&!k.jaEx){toast("作る音声の種類を選んでください");return;}
+  const miss=await ttsMissing(await ttsTextsFor(book,k));
   if(!miss.length){toast("この範囲の音声はすべて作成済みです");refreshBulkInfo();return;}
-  const chars=miss.reduce((a,t)=>a+t.length,0);
+  const chars=miss.reduce((a,t)=>a+t.text.length,0);
   if(!confirm(`${book||"すべての教材"}の音声 ${miss.length} 件（約 ${chars.toLocaleString()} 文字）を Google から取得して保存します。よろしいですか？`))return;
   ttsBulk={running:true,abort:false,done:0,total:miss.length,book};
   paintBulk();
@@ -3778,8 +3846,8 @@ async function runTtsBulk(book){
   for(const t of miss){
     if(ttsBulk.abort){stopMsg="中止しました";break;}
     try{
-      const b64=await ttsFetch(t);
-      try{await DB.put("audio",ttsCacheKey(t),b64);}catch(e){}
+      const b64=await ttsFetch(t.text,t.voice);
+      try{await DB.put("audio",ttsCacheKey(t.text,t.voice),b64);}catch(e){}
     }catch(e){
       failed++;
       if(e.status===400||e.status===403||/通信できません/.test(e.message)){stopMsg=e.message;break;}   // 続けても失敗する種類
@@ -3836,23 +3904,35 @@ function renderSettings(){
         <input id="cloudKey" type="password" value="${esc(SETTINGS.cloudKey||"")}" placeholder="AIza で始まるキーを貼り付け"
           autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"></div>
       <button class="btn ghost" id="cloudLoad">声の一覧を読み込む</button>
-      <div class="field" style="margin-top:12px"><label>声</label>
+      <div class="field" style="margin-top:12px"><label>英語の声</label>
         <select id="cloudVoiceSel" class="search" style="width:100%"></select></div>
-      <button class="btn ghost" id="cloudTest">この声で試聴</button>
+      <button class="btn ghost" id="cloudTest">英語の声を試聴</button>
+      <div class="field" style="margin-top:12px"><label>日本語の声（自動めくりで意味・訳を読む声）</label>
+        <select id="cloudVoiceJaSel" class="search" style="width:100%"></select></div>
+      <button class="btn ghost" id="cloudJaTest">日本語の声を試聴</button>
       <div id="cloudStatus" class="cloud-status"></div>
       <div class="field" style="margin-top:16px"><label>音声をまとめて作成（通信できるときに）</label>
         <select id="bulkBook" class="search" style="width:100%">
           <option value="">すべての教材</option>${booksList().map(b=>`<option value="${esc(b)}">${esc(b)}</option>`).join("")}
         </select></div>
+      <div class="chips" id="bulkKinds" style="margin:2px 0 8px">
+        <button class="filter-chip ${bulkKinds().en?'on':''}" data-bk="en">英語（単語・例文）</button>
+        <button class="filter-chip ${bulkKinds().ja?'on':''}" data-bk="ja">日本語の意味</button>
+        <button class="filter-chip ${bulkKinds().jaEx?'on':''}" data-bk="jaEx">例文の訳</button>
+      </div>
       <div id="bulkInfo" class="cloud-status"></div>
       <div class="track" id="bulkTrack" style="display:none;margin:10px 0"><div id="bulkBar" style="width:0%"></div></div>
       <button class="btn primary" id="bulkStart">作成を始める</button>
       <div class="cloud-row"><span id="cacheInfo"></span><button class="link-btn" id="cacheClear">保存した音声を削除</button></div>
       <p class="cloud-note">APIキーはこの端末だけに保存され、学習記録のバックアップには含まれません。設定方法は SETUP.md の「高品質音声の設定」を参照してください。</p>
     </div>
-    <div class="field"><label>端末の音声（Google が使えないときの予備）</label>
+    <div class="field"><label>端末の音声・英語（Google が使えないときの予備）</label>
       <select id="voiceSel" class="search" style="width:100%"></select>
       <button class="btn ghost" id="voiceTest" style="margin-top:9px">選んだ声で試聴</button>
+    </div>
+    <div class="field"><label>端末の音声・日本語（Google が使えないときの予備）</label>
+      <select id="jaVoiceSel" class="search" style="width:100%"></select>
+      <button class="btn ghost" id="jaVoiceTest" style="margin-top:9px">選んだ声で試聴</button>
     </div>
     <div class="toggle-row">
       <div class="t-main"><div class="t-title">すべての音声を表示</div>
@@ -3861,8 +3941,10 @@ function renderSettings(){
     </div>
     <div id="voiceDiag" style="color:var(--sub);font-size:11px;line-height:1.6;margin:2px 2px 10px"></div>
     <p style="color:var(--sub);font-size:11px;line-height:1.6;margin:-2px 2px 12px">★印は高品質音声です。Ava(Premium)などをダウンロードしても、iOSの仕様でSafariからは見えないことがあります。下の診断でWebがAvaを認識しているか確認できます。認識されない場合は、別の高品質音声（Siri相当など）を選ぶのが確実です。</p>
-    <div class="field"><label>読み上げ速度（${(SETTINGS.speechRate||0.92).toFixed(2)}）</label>
+    <div class="field"><label>英語の読み上げ速度（${(SETTINGS.speechRate||0.92).toFixed(2)}）</label>
       <input type="range" id="rate" min="0.6" max="1.2" step="0.02" value="${SETTINGS.speechRate||0.92}" style="width:100%"></div>
+    <div class="field"><label>日本語の読み上げ速度（${jaRate().toFixed(2)}）</label>
+      <input type="range" id="jaRate" min="0.7" max="1.5" step="0.05" value="${jaRate()}" style="width:100%"></div>
     <div class="toggle-row">
       <div class="t-main"><div class="t-title">制限時間モード</div>
       <div class="t-sub">考える時間を区切ってテンポよく。時間切れは不正解にせず要復習に</div></div>
@@ -3964,6 +4046,25 @@ function renderSettings(){
   };
   const vtest=$("#voiceTest");
   if(vtest)vtest.onclick=()=>speak("This is the selected voice.",null);
+  // 端末の日本語の声
+  const rebuildJaDevice=()=>{
+    const sel=$("#jaVoiceSel");if(!sel)return;
+    const vs=japaneseVoices();
+    sel.innerHTML=`<option value="">自動</option>`+vs.map(v=>{
+      const hq=/premium|enhanced|拡張|プレミアム/i.test(v.name||"");
+      return `<option value="${esc(v.voiceURI)}" ${SETTINGS.jaVoiceURI===v.voiceURI?"selected":""}>${hq?"★ ":""}${esc(v.name)}</option>`;}).join("")
+      +(vs.length?"":`<option value="" disabled>（日本語の声が見つかりません）</option>`);
+  };
+  rebuildJaDevice();
+  if(synth)setTimeout(()=>{try{rebuildJaDevice();}catch(e){}},500);
+  const jsel=$("#jaVoiceSel");
+  const jaSample="他動詞。1、なになにを通り過ぎる。2、なになにを抜く。";
+  if(jsel)jsel.onchange=async e=>{
+    SETTINGS.jaVoiceURI=e.target.value;await DB.put("kv","settings",SETTINGS);
+    deviceSpeak(jaSample,null,{lang:"ja"});
+  };
+  const jtest=$("#jaVoiceTest");
+  if(jtest)jtest.onclick=()=>{stopSpeak();deviceSpeak(jaSample,null,{lang:"ja"});};
   bindSwitch("#allVoiceSwitch",()=>(SETTINGS.showAllVoices=!SETTINGS.showAllVoices),()=>rebuildVoiceOptions());
   // iOSで一覧が遅れて揃うケースに備え、開いた直後にもう一度取り直す
   if(synth){setTimeout(()=>{try{synth.getVoices();rebuildVoiceOptions();}catch(e){}},400);}
@@ -3993,6 +4094,21 @@ function renderSettings(){
     cloudTryVoice($("#cloudTest"));
   };
   $("#cloudTest").onclick=e=>cloudTryVoice(e.currentTarget);
+  rebuildCloudJaOptions();
+  $("#cloudVoiceJaSel").onchange=async e=>{
+    SETTINGS.cloudVoiceJa=e.target.value;   // 空＝自動（次に読むときに英語の声に合わせて選ぶ）
+    await DB.put("kv","settings",SETTINGS);
+    refreshCloudStatus();refreshBulkInfo();
+    cloudTryJaVoice($("#cloudJaTest"));
+  };
+  $("#cloudJaTest").onclick=e=>cloudTryJaVoice(e.currentTarget);
+  document.querySelectorAll("[data-bk]").forEach(b=>b.onclick=()=>{
+    if(ttsBulk.running)return;
+    const key={en:"bulkEn",ja:"bulkJa",jaEx:"bulkJaEx"}[b.dataset.bk];
+    const cur=bulkKinds()[b.dataset.bk];
+    SETTINGS[key]=!cur;b.classList.toggle("on",!cur);
+    DB.put("kv","settings",SETTINGS);refreshBulkInfo();
+  });
   $("#bulkBook").onchange=()=>refreshBulkInfo();
   $("#bulkStart").onclick=()=>{
     if(ttsBulk.running){ttsBulk.abort=true;return;}
@@ -4006,7 +4122,10 @@ function renderSettings(){
   };
   if(ttsBulk.running)paintBulk();
   $("#rate").oninput=async e=>{SETTINGS.speechRate=+e.target.value;
-    e.target.previousElementSibling.textContent=`読み上げ速度（${SETTINGS.speechRate.toFixed(2)}）`;
+    e.target.previousElementSibling.textContent=`英語の読み上げ速度（${SETTINGS.speechRate.toFixed(2)}）`;
+    await DB.put("kv","settings",SETTINGS);};
+  $("#jaRate").oninput=async e=>{SETTINGS.jaSpeechRate=+e.target.value;
+    e.target.previousElementSibling.textContent=`日本語の読み上げ速度（${jaRate().toFixed(2)}）`;
     await DB.put("kv","settings",SETTINGS);};
   $("#rate").onchange=()=>speak("example",null);  // プレビュー
   $("#timedSwitch").onclick=async e=>{SETTINGS.timed=!SETTINGS.timed;await DB.put("kv","settings",SETTINGS);renderSettings();};
