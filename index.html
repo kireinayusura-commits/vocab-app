@@ -345,6 +345,10 @@
   .col{color:var(--blue);}
   .ng{color:#c07a76;opacity:.85;font-size:.92em;}
   .flash-card .fc-ex .col{color:#8cc4ff;}
+  .ml-word{display:flex;align-items:center;}
+  .ml-x{flex:none;background:none;border:1px solid var(--line);color:var(--sub);border-radius:10px;width:36px;height:36px;font-size:14px;cursor:pointer;}
+  .ml-legend{display:flex;flex-wrap:wrap;gap:6px 12px;font-size:11px;color:var(--sub);margin:0 0 16px;}
+  .ml-legend i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:4px;vertical-align:0;}
   .ml-hint{font-size:11px;color:var(--sub);line-height:1.6;margin:-4px 2px 10px;}
   .ml-books{display:flex;flex-direction:column;gap:8px;}
   .ml-book{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden;}
@@ -369,6 +373,15 @@
   .ml-sub{font-size:11px;color:var(--sub);margin:12px 2px 6px;}
   .ml-preview{margin-top:18px;font-size:14px;color:var(--sub);}
   .ml-preview b{color:var(--ink);font-size:18px;}
+  .set-h{font-size:12px;font-weight:700;color:var(--gold);letter-spacing:1px;margin:22px 2px 10px;}
+  .set-page>.set-h:first-child,.set-page>*:first-child .set-h{margin-top:4px;}
+  .set-more{margin:10px 0 6px;border:1px solid var(--line);border-radius:12px;padding:0 12px;}
+  .set-more>summary{list-style:none;cursor:pointer;padding:12px 0;font-size:13px;color:var(--sub);}
+  .set-more>summary::-webkit-details-marker{display:none;}
+  .set-more>summary::after{content:" ▾";}
+  .set-more[open]>summary::after{content:" ▴";}
+  .set-more.danger>summary{color:var(--red);}
+  .set-menu .row-sub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .start-pos{display:flex;align-items:center;gap:8px;}
   .start-pos input{width:76px;text-align:center;background:var(--panel);border:1px solid var(--line);color:var(--ink);
     border-radius:10px;padding:9px 6px;font-size:16px;font-family:'Archivo',sans-serif;}
@@ -381,6 +394,10 @@
   .jump-row{display:flex;align-items:center;gap:8px;margin-top:8px;}
   .jump-lbl{flex:1;min-width:0;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .jump-row .btn{width:auto;margin:0;padding:9px 16px;flex:none;}
+  .split-filter{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:12px 14px 6px;margin-top:6px;}
+  .split-filter-h{font-size:13px;font-weight:700;margin-bottom:8px;}
+  .split-filter-h small{font-weight:400;color:var(--sub);font-size:11px;margin-left:6px;}
+  .split-btns .btn[disabled]{opacity:.4;}
   .split-preview{margin-top:14px;font-size:13px;color:var(--sub);}
   .split-list{display:flex;flex-direction:column;gap:10px;margin-top:14px;}
   .split-row{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:13px 14px;}
@@ -2289,7 +2306,7 @@ function switchTab(tab){
     if(flashSession)resumeFlash();
     else renderMyVocab();
   }else{
-    ({home:renderHome,progress:renderProgress,settings:renderSettings})[tab]();
+    ({home:renderHome,progress:renderProgress,settings:renderSettingsRoot})[tab]();
   }
   window.scrollTo(0,0);
 }
@@ -2785,37 +2802,60 @@ function renderSplit(items,key,label,backFn,scope){
   const states=groups.map(chunkState);
   const next=states.findIndex(s=>!s.done);
   const doneN=states.filter(s=>s.done).length;
+  // 学習する単語を習熟度でしぼる（組ごとの「めくる／学習する」に効く。分割ごとに覚えておく）
+  const flt=new Set(plan.filter||[]);
+  const pick=its=>flt.size?its.filter(d=>flt.has(statusKeyOf(d))):its;
+  const fltLabel=flt.size?" · "+ML_STATUS.filter(([k])=>flt.has(k)).map(([,l])=>l).join("・"):"";
+  const allIts=groups.flat();
+  const stCount=k=>new Set(allIts.filter(d=>statusKeyOf(d)===k).map(wordKey)).size;
+  const picked=pick(allIts);
   screen.innerHTML=`
     <div class="navbar"><button class="back" id="bk">← 戻る</button><div class="nav-title"><b>${esc(label)}</b></div></div>
     <div class="lt" style="font-size:22px">分割して学習</div>
     <div class="lt-sub">${plan.total} 語を ${plan.size} 語ずつ・${plan.chunks.length} 組（${plan.order==="random"?"ランダム":"教材の順"}）。済 ${doneN} / ${plan.chunks.length} 組</div>
+    <div class="split-filter">
+      <div class="split-filter-h">学習する単語 <small>${flt.size?"選んだ習熟度だけ":"組の全部"}</small></div>
+      <div class="chips">
+        <button class="filter-chip ${flt.size?"":"on"}" data-sf="">すべて</button>
+        ${ML_STATUS.map(([k,l])=>{const n=stCount(k);return `<button class="filter-chip ${flt.has(k)?"on":""} ${n?"":"dimchip"}" data-sf="${k}">${l} ${n}</button>`;}).join("")}
+      </div>
+      ${flt.size&&picked.length?`<button class="btn ghost" id="allPick" style="margin-top:4px">全組の${esc(fltLabel.slice(3))}をまとめて学習（${picked.length}語）</button>`:""}
+    </div>
     <div class="split-list">
       ${groups.map((its,i)=>{const st=states[i];
         const a=i*plan.size+1,b=i*plan.size+its.length;
         return `<div class="split-row ${st.done?"done":""} ${i===next?"is-next":""}">
           <div class="split-head">
             <div class="split-title">${i+1}組目 <small>${a}〜${b}</small>${i===next?`<span class="split-next">次はここ</span>`:""}${st.done?`<span class="split-done">✓ 済</span>`:""}</div>
-            <div class="split-meta">${its.length}語 · 未学習 ${st.m.counts[0]} · つまずき ${st.m.counts[1]} · <b style="color:${pctColorOf(st.m.pct)}">${st.m.pct}%</b></div>
+            <div class="split-meta">${its.length}語 · ${["未学習","つまずき","学習中","定着中","マスター"].map((l,k)=>st.m.counts[k]?`${l} ${st.m.counts[k]}`:"").filter(x=>x).join(" · ")} · <b style="color:${pctColorOf(st.m.pct)}">${st.m.pct}%</b></div>
           </div>
           ${masteryBarHTML(st.m.counts,"height:6px;margin:8px 0 10px")}
-          <div class="split-btns">
-            <button class="btn ghost sm" data-fl="${i}">めくる</button>
-            <button class="btn primary sm" data-qz="${i}">学習する</button>
-          </div>
+          ${(()=>{const n=pick(its).length;return `<div class="split-btns">
+            <button class="btn ghost sm" data-fl="${i}" ${n?"":"disabled"}>めくる${flt.size?`（${n}）`:""}</button>
+            <button class="btn primary sm" data-qz="${i}" ${n?"":"disabled"}>${flt.size?(n?`学習する（${n}語）`:"該当なし"):"学習する"}</button>
+          </div>`;})()}
         </div>`;}).join("")}
     </div>
     <button class="btn ghost" id="redo" style="margin-top:16px">分け直す（今の条件の ${items.length} 語で）</button>
     <button class="btn ghost" id="del" style="margin-top:10px;color:var(--red);border-color:var(--red)">分割をやめる</button>`;
   $("#bk").onclick=backFn;
+  document.querySelectorAll("[data-sf]").forEach(c=>c.onclick=async()=>{
+    const k=c.dataset.sf;
+    if(!k)flt.clear();else if(flt.has(k))flt.delete(k);else flt.add(k);
+    plan.filter=[...flt];await saveSplits();
+    const y=window.scrollY;self();window.scrollTo(0,y);
+  });
+  const ap=$("#allPick");
+  if(ap)ap.onclick=()=>goTab("study",()=>renderFormSelect(shuffle(picked.slice()),`${label} · 全組${fltLabel}`,self));
   document.querySelectorAll("[data-qz]").forEach(b=>b.onclick=()=>{
-    const i=+b.dataset.qz;const its=groups[i];
-    if(!its.length){toast("この組の単語が見つかりません");return;}
-    goTab("study",()=>renderFormSelect(shuffle(its.slice()),`${label} · ${i+1}組目`,self));
+    const i=+b.dataset.qz;const its=pick(groups[i]);
+    if(!its.length){toast(flt.size?"この組には該当する単語がありません":"この組の単語が見つかりません");return;}
+    goTab("study",()=>renderFormSelect(shuffle(its.slice()),`${label} · ${i+1}組目${fltLabel}`,self));
   });
   document.querySelectorAll("[data-fl]").forEach(b=>b.onclick=()=>{
-    const i=+b.dataset.fl;const its=groups[i];
-    if(!its.length){toast("この組の単語が見つかりません");return;}
-    goTab("myvocab",()=>startFlash(its,`${label} · ${i+1}組目`,"en2ja",()=>goTab("study",self)));
+    const i=+b.dataset.fl;const its=pick(groups[i]);
+    if(!its.length){toast(flt.size?"この組には該当する単語がありません":"この組の単語が見つかりません");return;}
+    goTab("myvocab",()=>startFlash(its,`${label} · ${i+1}組目${fltLabel}`,"en2ja",()=>goTab("study",self)));
   });
   $("#redo").onclick=async()=>{
     if(!confirm("今の条件で分け直します。今の組分けは消えます（習熟度は残ります）。"))return;
@@ -2834,6 +2874,15 @@ const ML_SEP="␟";
 function allCategories(){return uniq(QUESTIONS.map(d=>d.category));}
 // 古い形式（教材 AND セクション）を新しい形式（範囲は OR）に直す
 function migrateMylist(ml){
+  migrateMylistV2(ml);
+  // 固定リスト：作ったときの単語を残す。習熟度で集めた前からのリストは、今の中身で固定する（覚えても抜けないように）
+  if(ml.fixed===undefined){
+    if((ml.statuses||[]).length){ml.fixed=true;ml.keys=uniq(mylistMatch(ml).map(wordKey));ml.fixedAt=Date.now();ml._migrated=true;}
+    else ml.fixed=false;
+  }
+  return ml;
+}
+function migrateMylistV2(ml){
   if(ml.v===2)return ml;
   ml.books=ml.books||[];ml.sections=ml.sections||[];
   if(ml.sections.length){
@@ -2848,8 +2897,19 @@ function mylistInScope(ml,d){
   if(!bs.length&&!ss.length&&!ts.length)return true;
   return bs.includes(d.book)||ss.includes(d.book+ML_SEP+d.section)||ts.includes(d.book+ML_SEP+d.section+ML_SEP+(d.theme||""));
 }
+// 固定リストは保存した単語（同じ教材・範囲の単語を優先して引き当てる）。自動のリストは条件で毎回集める
 function mylistItems(ml,noStatus){
   migrateMylist(ml);
+  if(ml.fixed&&Array.isArray(ml.keys)){
+    const pref=new Map(),any=new Map();
+    for(const d of QUESTIONS){const k=wordKey(d);if(!any.has(k))any.set(k,d);if(!pref.has(k)&&mylistInScope(ml,d))pref.set(k,d);}
+    return uniq(ml.keys).map(k=>pref.get(k)||any.get(k)).filter(Boolean);
+  }
+  return mylistMatch(ml,noStatus);
+}
+// 条件に合う単語（今の習熟度で）
+function mylistMatch(ml,noStatus){
+  migrateMylistV2(ml);
   const stats=noStatus?[]:(ml.statuses||[]);
   const tags=ml.tags||[];
   return QUESTIONS.filter(d=>
@@ -2874,21 +2934,24 @@ function mylistSummary(ml){
   const order=booksList();
   const ents=Object.entries(byBook).sort((x,y)=>order.indexOf(x[0])-order.indexOf(y[0]));   // 教材の並び順で
   for(const [b,v] of ents)parts.push(v==="全体"?b:`${b}（${[v.s?v.s+"セクション":"",v.t?v.t+"小テーマ":""].filter(x=>x).join("・")}）`);
+
   const stMap=Object.fromEntries(ML_STATUS);
   parts.push(...(ml.statuses||[]).map(s=>stMap[s]||s),...(ml.cats||[]),...((ml.types||[]).map(t=>TYPE_LABEL[t]||t)),...(ml.tags||[]));
-  return parts.join("・")||"全教材";
+  return (ml.fixed?"固定 · ":"")+(parts.join("・")||"全教材");
 }
 function renderMyLists(){
   sessionReturn=renderMyLists;
+  MYLISTS.forEach(migrateMylist);
+  if(MYLISTS.some(ml=>ml._migrated)){MYLISTS.forEach(ml=>delete ml._migrated);saveMyLists();}
   screen.innerHTML=`
     <div class="navbar"><button class="back" id="bk">← 学習</button><div class="nav-title"><b>マイリスト</b></div></div>
     <div class="lt" style="font-size:22px">マイリスト学習</div>
     <div class="lt-sub">教材・セクション・小テーマを組み合わせて範囲を作り、習熟度などでしぼれます。教材に単語を足すと、条件に合うものは自動で増えます。</div>
     ${MYLISTS.length?`<div class="list">
-      ${MYLISTS.map((ml,i)=>{const its=mylistItems(ml);const m=masteryOf(mylistItems(ml,true));
+      ${MYLISTS.map((ml,i)=>{const its=mylistItems(ml);const m=masteryOf(its);   // 進捗はリストに入っている単語だけで
         return `<button class="row" data-i="${i}">
           <div class="row-main"><div class="row-title">${esc(ml.name)}${SPLITS["m"+ML_SEP+ml.id]?` <span class="split-badge">分割中</span>`:""}</div>
-          <div class="row-sub">${its.length} 問 · ${esc(mylistSummary(ml))}</div>
+          <div class="row-sub">${its.length} 問 · マスター <b style="color:${pctColorOf(m.pct)}">${m.pct}%</b> · ${esc(mylistSummary(ml))}</div>
           ${masteryBarHTML(m.counts,"height:5px;margin-top:7px")}</div>
           <div class="row-arrow">→</div></button>`;}).join("")}</div>`
     :`<div class="empty">まだマイリストがありません。<br>下のボタンから作成できます。</div>`}
@@ -2901,17 +2964,20 @@ function renderMyListDetail(i){
   const ml=MYLISTS[i];const items=mylistItems(ml);
   const self=()=>renderMyListDetail(i);
   sessionReturn=self;
-  const m=masteryOf(mylistItems(ml,true));
+  const m=masteryOf(items);   // 進捗はリストに入っている単語だけで
   const spKey="m"+ML_SEP+ml.id;
+
   screen.innerHTML=`
     <div class="navbar"><button class="back" id="bk">← マイリスト</button><div class="nav-title"><b>${esc(ml.name)}</b></div></div>
     <div class="lt" style="font-size:22px">${esc(ml.name)}</div>
-    <div class="lt-sub">${items.length} 問が条件に合っています。<br>${esc(mylistSummary(ml))}</div>
-    ${masteryBarHTML(m.counts,"height:7px;margin:4px 0 16px")}
+    <div class="lt-sub">${ml.fixed?`${items.length} 語（作ったときの単語を固定${ml.fixedAt?` · ${new Date(ml.fixedAt).toLocaleDateString("ja-JP")}`:""}）`:`${items.length} 問が条件に合っています（自動で更新）`}<br>${esc(mylistSummary(ml))}</div>
+    ${masteryBarHTML(m.counts,"height:7px;margin:4px 0 8px")}
+    <div class="ml-legend">${["未学習","つまずき","学習中","定着中","マスター"].map((l,k)=>m.counts[k]?`<span><i style="background:${BAR_COLORS[k]}"></i>${l} ${m.counts[k]}</span>`:"").join("")}</div>
     <button class="btn primary" id="study">この範囲で学習</button>
     <button class="btn ghost" id="split" style="margin-top:10px">分割して少しずつ学習${SPLITS[spKey]?` <span class="split-badge">分割中</span>`:""}</button>
     <button class="btn ghost" id="flash" style="margin-top:10px">単語帳でめくる</button>
-    <button class="btn ghost" id="editL" style="margin-top:10px">条件を編集</button>
+    <button class="btn ghost" id="wordsL" style="margin-top:10px">単語を見る${ml.fixed?"・外す":""}</button>
+    <button class="btn ghost" id="editL" style="margin-top:10px">${ml.fixed?"条件を編集・単語を足す":"条件を編集"}</button>
     <button class="btn ghost" id="delL" style="margin-top:10px;color:var(--red);border-color:var(--red)">削除</button>`;
   $("#bk").onclick=renderMyLists;
   $("#study").onclick=()=>{
@@ -2924,13 +2990,39 @@ function renderMyListDetail(i){
     goTab("myvocab",()=>renderFlashStart(items,ml.name,()=>goTab("study",self)));
   };
   $("#editL").onclick=()=>renderMyListForm(i);
+  $("#wordsL").onclick=()=>renderMyListWords(i);
   $("#delL").onclick=async()=>{if(!confirm("このマイリストを削除しますか？"))return;
     if(SPLITS[spKey]){delete SPLITS[spKey];saveSplits();}
     MYLISTS.splice(i,1);await saveMyLists();toast("削除しました");renderMyLists();};
 }
+// リストの単語一覧（固定リストは ✕ で外せる）
+function renderMyListWords(i){
+  const ml=MYLISTS[i];
+  const draw=()=>{
+    const items=mylistItems(ml);
+    const y=window.scrollY;
+    screen.innerHTML=`
+      <div class="navbar"><button class="back" id="bk">← ${esc(ml.name)}</button><div class="nav-title"><b>単語</b> · ${items.length}</div></div>
+      <div class="lt" style="font-size:22px">${esc(ml.name)}の単語</div>
+      <div class="lt-sub">${ml.fixed?"✕ でこのリストから外せます（教材や習熟度はそのまま）。":"自動で更新するリストです。条件に合う単語が並びます。"}</div>
+      <div class="list">${items.map(d=>`<div class="row ml-word">
+        <div class="row-main"><div class="row-title">${esc(d.question)} ${statusBadgeShort(d)}</div>
+        <div class="row-sub">${esc(d.answer)} · ${esc(d.book)}</div></div>
+        ${ml.fixed?`<button class="ml-x" data-x="${encodeURIComponent(wordKey(d))}" aria-label="外す">✕</button>`:""}</div>`).join("")||`<div class="empty">単語がありません</div>`}</div>`;
+    window.scrollTo(0,y);
+    $("#bk").onclick=()=>renderMyListDetail(i);
+    document.querySelectorAll("[data-x]").forEach(b=>b.onclick=async()=>{
+      const k=decodeURIComponent(b.dataset.x);
+      ml.keys=ml.keys.filter(x=>x!==k);
+      await saveMyLists();toast("リストから外しました");draw();
+    });
+  };
+  draw();
+}
 function renderMyListForm(i){
   const isNew=i<0;
-  const ml=migrateMylist(isNew?{name:"",books:[],sections:[],themesQ:[],cats:[],types:[],statuses:[],tags:[],v:2}:JSON.parse(JSON.stringify(MYLISTS[i])));
+  const ml=migrateMylist(isNew?{name:"",books:[],sections:[],themesQ:[],cats:[],types:[],statuses:[],tags:[],v:2,fixed:true}:JSON.parse(JSON.stringify(MYLISTS[i])));
+  const wasFixed=!isNew&&ml.fixed;
   const books=booksList();
   const S=ML_SEP;
   const openBooks=new Set(books.filter(b=>ml.books.includes(b)||ml.sections.some(q=>q.startsWith(b+S))||ml.themesQ.some(q=>q.startsWith(b+S))));
@@ -2980,7 +3072,7 @@ function renderMyListForm(i){
       </div>
     </div>`;
   };
-  const scoped=()=>mylistItems({...ml,cats:[],types:[],tags:[],statuses:[]});
+  const scoped=()=>mylistMatch({...ml,cats:[],types:[],tags:[],statuses:[]});
   const draw=()=>{
     const sc=scoped();
     const cats=uniq(sc.map(d=>d.category)).filter(c=>c);
@@ -3005,14 +3097,24 @@ function renderMyListForm(i){
         ${cats.length<=1&&types.length<=1&&!tags.length?`<div class="ml-sub">この範囲には、しぼれる品詞・形式がありません</div>`:""}
       </div>
       <div class="ml-preview" id="preview"></div>
-      <p style="color:var(--sub);font-size:11px;line-height:1.6;margin:6px 2px 0">習熟度を条件にすると、学習が進むにつれて中身が変わります（例：「未学習」のリストは覚えるほど減ります）。</p>
-      <button class="btn primary" id="save" style="margin-top:14px">保存する</button>`;
+      <div class="toggle-row" style="margin-top:14px">
+        <div class="t-main"><div class="t-title">作ったときの単語で固定する</div>
+        <div class="t-sub">${ml.fixed?"保存した時点の単語がずっと残ります。つまずきで集めた単語は、覚えてもリストから抜けません":"条件で毎回集め直します。教材に足した単語は自動で入り、習熟度の条件に合わなくなった単語は抜けます"}</div></div>
+        <button class="switch ${ml.fixed?'on':''}" id="fixSwitch"></button>
+      </div>
+      ${wasFixed&&ml.fixed?`<button class="btn primary" id="saveAdd" style="margin-top:14px">今の単語に、条件に合う単語を足して保存</button>
+        <button class="btn ghost" id="save" style="margin-top:10px">条件に合う単語で入れ替えて保存</button>`
+      :`<button class="btn primary" id="save" style="margin-top:14px">保存する</button>`}`;
     window.scrollTo(0,y);
     bind();refresh();
   };
   const refresh=()=>{
-    const n=mylistItems(ml).length;
-    const p=$("#preview");if(p)p.innerHTML=`条件に合う単語：<b>${n}</b> 語`;
+    const n=mylistMatch(ml).length;
+    const p=$("#preview");if(!p)return;
+    if(wasFixed&&ml.fixed){
+      const cur=new Set(ml.keys||[]);const add=uniq(mylistMatch(ml).map(wordKey)).filter(k=>!cur.has(k)).length;
+      p.innerHTML=`今のリスト：<b>${cur.size}</b> 語　／　条件に合う単語：<b>${n}</b> 語（新しく足せる ${add} 語）`;
+    }else p.innerHTML=`条件に合う単語：<b>${n}</b> 語`;
   };
   const toggle=(arr,val)=>{const k=arr.indexOf(val);if(k>=0)arr.splice(k,1);else arr.push(val);};
   const bind=()=>{
@@ -3039,11 +3141,20 @@ function renderMyListForm(i){
     document.querySelectorAll("[data-type]").forEach(c=>c.onclick=()=>{toggle(ml.types,decodeURIComponent(c.dataset.type));draw();});
     document.querySelectorAll("[data-tg]").forEach(c=>c.onclick=()=>{toggle(ml.tags,decodeURIComponent(c.dataset.tg));draw();});
     $("#more").onclick=()=>{moreOpen=!moreOpen;draw();};
-    $("#save").onclick=async()=>{
+    $("#fixSwitch").onclick=()=>{ml.fixed=!ml.fixed;draw();};
+    const finish=async(mode)=>{
       ml.name=$("#mlName").value.trim()||"無題のリスト";
+      const now=uniq(mylistMatch(ml).map(wordKey));
+      if(ml.fixed){
+        if(mode==="add")ml.keys=uniq([...(ml.keys||[]),...now]);
+        else{ml.keys=now;ml.fixedAt=Date.now();}
+        if(!ml.keys.length){toast("条件に合う単語がありません");return;}
+      }else delete ml.keys;
       if(isNew){ml.id=Date.now();MYLISTS.push(ml);}else MYLISTS[i]=ml;
-      await saveMyLists();toast("保存しました");renderMyLists();
+      await saveMyLists();toast(ml.fixed?`${ml.keys.length} 語で保存しました`:"保存しました");renderMyLists();
     };
+    $("#save").onclick=()=>finish("replace");
+    const sa=$("#saveAdd");if(sa)sa.onclick=()=>finish("add");
   };
   draw();
 }
@@ -4224,26 +4335,43 @@ async function runTtsBulk(book){
 }
 
 /* ---------- SETTINGS ---------- */
-function renderSettings(){
+// 設定はページに分ける（一覧 → 各ページ）。ページは覚えておき、ページ内で描き直しても同じページのまま
+const SET_PAGES={goal:"目標",study:"学習（問題）",flash:"単語帳・自動めくり",voice:"音声",data:"データ・バックアップ"};
+let settingsPage=null;
+function settingsSummary(k){
+  const on=v=>v?"オン":"オフ";
+  if(k==="goal"){const sc=SETTINGS.goalScope||{books:[],cats:[]};const n=(sc.books||[]).length+(sc.cats||[]).length;
+    return `${SETTINGS.goalDate?SETTINGS.goalDate.replace(/-/g,"/")+" まで":"目標日 未設定"} · ${n?"範囲を指定":"全単語"}`;}
+  if(k==="study")return `品詞 ${on(SETTINGS.showPos)} · 回答後の例文 ${on(SETTINGS.showExample!==false)} · 制限時間 ${SETTINGS.timed?`${stageSec("gate")}秒／${stageSec("choice")}秒`:"オフ"}`;
+  if(k==="flash")return `答えまで ${autoSec("autoJaSec")}秒 · 次まで ${autoSec("autoNextSec")}秒${SETTINGS.autoScale!==false?"＋α":""} · 日本語 ${on(SETTINGS.autoReadJa!==false)} · 例文 ${on(!!SETTINGS.autoReadEx)}`;
+  if(k==="voice")return `${SETTINGS.cloudTTS&&SETTINGS.cloudKey?"Google "+(String(SETTINGS.cloudVoice||"").split("-").pop()||""):"端末の音声"} · 自動読み上げ ${on(SETTINGS.autoPlay)} · 速度 ${(SETTINGS.speechRate||0.92).toFixed(2)}`;
+  if(k==="data")return `${LIBRARY.length} 教材 · ${QUESTIONS.length.toLocaleString()} 語 · 読み込み・書き出し・バックアップ`;
+  return "";
+}
+function renderSettingsRoot(){settingsPage=null;renderSettings();}
+function renderSettings(page){
+  if(typeof page==="string")settingsPage=page;
   screen.innerHTML=`
-    <div class="lt-eyebrow">Settings</div>
+    ${settingsPage?`<div class="navbar"><button class="back" id="setBack">← 設定</button><div class="nav-title"><b>${esc(SET_PAGES[settingsPage]||"")}</b></div></div>
+      <div class="lt" style="font-size:24px">${esc(SET_PAGES[settingsPage]||"")}</div>`
+    :`<div class="lt-eyebrow">Settings</div>
     <div class="lt">設定</div>
-    <div class="lt-sub">目標・データ・学習の設定を管理します。</div>
+    <div class="lt-sub">項目を選んでください。</div>
+    <div class="list set-menu">${Object.entries(SET_PAGES).map(([k,t])=>`<button class="row" data-setpage="${k}">
+      <div class="row-main"><div class="row-title">${t}</div><div class="row-sub">${esc(settingsSummary(k))}</div></div><div class="row-arrow">→</div></button>`).join("")}</div>`}
+    <section class="set-page" data-page="goal" style="${settingsPage==="goal"?"":"display:none"}">
 
-    <div class="divider"><span>Goal</span></div>
     <div class="field"><label>目標日（試験日など）</label>
       <input type="date" id="goalDate" value="${esc(SETTINGS.goalDate)}"></div>
     <button class="row" id="goalScope"><div class="row-main"><div class="row-title">目標の範囲</div>
       <div class="row-sub">${(()=>{const sc=SETTINGS.goalScope||{books:[],cats:[]};const parts=[...(sc.books||[]),...(sc.cats||[])];return parts.length?parts.join("・"):"全単語をマスター";})()}</div></div>
       <div class="row-arrow">→</div></button>
 
-    <div class="divider"><span>Learning</span></div>
-    <div class="toggle-row">
-      <div class="t-main"><div class="t-title">自動読み上げ</div>
-      <div class="t-sub">英→日の問題と、単語帳のカードをめくったときに単語を自動再生（自動めくりは この設定に関係なく読みます）</div></div>
-      <button class="switch ${SETTINGS.autoPlay?'on':''}" id="apSwitch"></button>
-    </div>
-    <div class="toggle-row">
+    
+    </section>
+    <section class="set-page" data-page="study" style="${settingsPage==="study"?"":"display:none"}">
+<div class="set-h">回答のとき</div>
+<div class="toggle-row">
       <div class="t-main"><div class="t-title">四択で品詞を表示</div>
       <div class="t-sub">問題の単語の横に品詞（名・動など）を表示。ヒントを増やしたいとき</div></div>
       <button class="switch ${SETTINGS.showPos?'on':''}" id="posSwitch"></button>
@@ -4253,7 +4381,59 @@ function renderSettings(){
       <div class="t-sub">答え合わせのあと、例文があれば表示。単語と例文をつなげて覚える</div></div>
       <button class="switch ${SETTINGS.showExample!==false?'on':''}" id="exSwitch"></button>
     </div>
-    <div class="divider"><span>Voice</span></div>
+        <div class="set-h">制限時間</div>
+    <div class="toggle-row">
+      <div class="t-main"><div class="t-title">制限時間モード</div>
+      <div class="t-sub">考える時間を区切ってテンポよく。時間切れは不正解にせず要復習に</div></div>
+      <button class="switch ${SETTINGS.timed?'on':''}" id="timedSwitch"></button>
+    </div>
+    ${SETTINGS.timed?`<div class="field"><label>「わかる／わからない」の制限時間（${stageSec("gate")} 秒）</label>
+      <input type="range" id="gateSec" min="1" max="20" step="1" value="${stageSec("gate")}" style="width:100%"></div>
+    <div class="field"><label>四択の制限時間（${stageSec("choice")} 秒）</label>
+      <input type="range" id="choiceSec" min="1" max="20" step="1" value="${stageSec("choice")}" style="width:100%"></div>
+    <p class="cloud-note" style="margin-top:-4px">英→日の問題で使います。「わかる／わからない」で時間切れになると「わからない」、四択で時間切れになると答えを表示して要復習に入ります。</p>`:""}
+
+    
+    </section>
+    <section class="set-page" data-page="flash" style="${settingsPage==="flash"?"":"display:none"}">
+<div class="set-h">自動めくり</div>
+    <p class="cloud-note" style="margin:0 2px 12px">単語帳のカード画面で「▶ 自動」を押すと、英語を読み上げ → 日本語を表示して読み上げ → 次のカード、と自動で進みます（「日 → 英」でめくっているときは日本語が先）。秒数は読み上げが終わってから数えます。</p>
+    <div class="field"><label>答えを出すまで（${autoSec("autoJaSec")} 秒）</label>
+      <input type="range" id="autoJaSec" min="1" max="10" step="1" value="${autoSec("autoJaSec")}" style="width:100%"></div>
+    <div class="field"><label>次のカードまで（${autoSec("autoNextSec")} 秒）</label>
+      <input type="range" id="autoNextSec" min="1" max="10" step="1" value="${autoSec("autoNextSec")}" style="width:100%"></div>
+    <div class="toggle-row">
+      <div class="t-main"><div class="t-title">意味・例文が多い単語は長く待つ</div>
+      <div class="t-sub">意味が2つ目から1つごと、読み上げない例文1つごとに秒数を足します（最大＋10秒）</div></div>
+      <button class="switch ${SETTINGS.autoScale!==false?'on':''}" id="autoScaleSwitch"></button>
+    </div>
+    <div class="field" id="autoPerBox" style="${SETTINGS.autoScale===false?"display:none":""}"><label>1つごとに足す秒数（＋${(+SETTINGS.autoPerItem||1).toFixed(1)} 秒）</label>
+      <input type="range" id="autoPerItem" min="0.5" max="3" step="0.5" value="${+SETTINGS.autoPerItem||1}" style="width:100%"></div>
+    <div class="toggle-row">
+      <div class="t-main"><div class="t-title">日本語も読み上げる</div>
+      <div class="t-sub">意味を日本語の声で読みます。オフにすると表示だけ</div></div>
+      <button class="switch ${SETTINGS.autoReadJa!==false?'on':''}" id="autoJaSwitch"></button>
+    </div>
+    <div class="toggle-row">
+      <div class="t-main"><div class="t-title">例文と訳も読み上げる</div>
+      <div class="t-sub">単語と意味のあとに、例文（英語）→ 訳（日本語）の順で読みます。カードで「例文 1つ」にしているときは1つだけ</div></div>
+      <button class="switch ${SETTINGS.autoReadEx?'on':''}" id="autoExSwitch"></button>
+    </div>
+
+    
+    </section>
+    <section class="set-page" data-page="voice" style="${settingsPage==="voice"?"":"display:none"}">
+    <div class="set-h">読み上げ</div>
+<div class="toggle-row">
+      <div class="t-main"><div class="t-title">自動読み上げ</div>
+      <div class="t-sub">英→日の問題と、単語帳のカードをめくったときに単語を自動再生（自動めくりは この設定に関係なく読みます）</div></div>
+      <button class="switch ${SETTINGS.autoPlay?'on':''}" id="apSwitch"></button>
+    </div>
+        <div class="field"><label>英語の読み上げ速度（${(SETTINGS.speechRate||0.92).toFixed(2)}）</label>
+      <input type="range" id="rate" min="0.6" max="1.2" step="0.02" value="${SETTINGS.speechRate||0.92}" style="width:100%"></div>
+    <div class="field"><label>日本語の読み上げ速度（${jaRate().toFixed(2)}）</label>
+      <input type="range" id="jaRate" min="0.7" max="1.5" step="0.05" value="${jaRate()}" style="width:100%"></div>
+<div class="set-h">Google の高品質音声</div>
     <div class="toggle-row">
       <div class="t-main"><div class="t-title">高品質音声（Google）を使う</div>
       <div class="t-sub">ネイティブに近い自然な発音で読み上げます。初回だけ通信し、音声は端末に保存して次から通信なしで再生します</div></div>
@@ -4286,14 +4466,16 @@ function renderSettings(){
       <div class="cloud-row"><span id="cacheInfo"></span><button class="link-btn" id="cacheClear">保存した音声を削除</button></div>
       <p class="cloud-note">APIキーはこの端末だけに保存され、学習記録のバックアップには含まれません。設定方法は SETUP.md の「高品質音声の設定」を参照してください。</p>
     </div>
-    <div class="field"><label>端末の音声・英語（Google が使えないときの予備）</label>
+    <div class="set-h">端末の音声（Google が使えないときの予備）</div>
+    <div class="field"><label>英語の声</label>
       <select id="voiceSel" class="search" style="width:100%"></select>
       <button class="btn ghost" id="voiceTest" style="margin-top:9px">選んだ声で試聴</button>
     </div>
-    <div class="field"><label>端末の音声・日本語（Google が使えないときの予備）</label>
+    <div class="field"><label>日本語の声</label>
       <select id="jaVoiceSel" class="search" style="width:100%"></select>
       <button class="btn ghost" id="jaVoiceTest" style="margin-top:9px">選んだ声で試聴</button>
     </div>
+    <details class="set-more"><summary>端末の声が見つからないとき</summary>
     <div class="toggle-row">
       <div class="t-main"><div class="t-title">すべての音声を表示</div>
       <div class="t-sub">効果音的な声も含めて一覧に出す（声が見つからないときの切り分け用）</div></div>
@@ -4301,58 +4483,22 @@ function renderSettings(){
     </div>
     <div id="voiceDiag" style="color:var(--sub);font-size:11px;line-height:1.6;margin:2px 2px 10px"></div>
     <p style="color:var(--sub);font-size:11px;line-height:1.6;margin:-2px 2px 12px">★印は高品質音声です。Ava(Premium)などをダウンロードしても、iOSの仕様でSafariからは見えないことがあります。下の診断でWebがAvaを認識しているか確認できます。認識されない場合は、別の高品質音声（Siri相当など）を選ぶのが確実です。</p>
-    <div class="field"><label>英語の読み上げ速度（${(SETTINGS.speechRate||0.92).toFixed(2)}）</label>
-      <input type="range" id="rate" min="0.6" max="1.2" step="0.02" value="${SETTINGS.speechRate||0.92}" style="width:100%"></div>
-    <div class="field"><label>日本語の読み上げ速度（${jaRate().toFixed(2)}）</label>
-      <input type="range" id="jaRate" min="0.7" max="1.5" step="0.05" value="${jaRate()}" style="width:100%"></div>
-    <div class="toggle-row">
-      <div class="t-main"><div class="t-title">制限時間モード</div>
-      <div class="t-sub">考える時間を区切ってテンポよく。時間切れは不正解にせず要復習に</div></div>
-      <button class="switch ${SETTINGS.timed?'on':''}" id="timedSwitch"></button>
-    </div>
-    ${SETTINGS.timed?`<div class="field"><label>「わかる／わからない」の制限時間（${stageSec("gate")} 秒）</label>
-      <input type="range" id="gateSec" min="1" max="20" step="1" value="${stageSec("gate")}" style="width:100%"></div>
-    <div class="field"><label>四択の制限時間（${stageSec("choice")} 秒）</label>
-      <input type="range" id="choiceSec" min="1" max="20" step="1" value="${stageSec("choice")}" style="width:100%"></div>
-    <p class="cloud-note" style="margin-top:-4px">英→日の問題で使います。「わかる／わからない」で時間切れになると「わからない」、四択で時間切れになると答えを表示して要復習に入ります。</p>`:""}
-
-    <div class="divider"><span>Auto Flip</span></div>
-    <p class="cloud-note" style="margin:0 2px 12px">単語帳のカード画面で「▶ 自動」を押すと、英語を読み上げ → 日本語を表示して読み上げ → 次のカード、と自動で進みます（「日 → 英」でめくっているときは日本語が先）。秒数は読み上げが終わってから数えます。</p>
-    <div class="field"><label>答えを出すまで（${autoSec("autoJaSec")} 秒）</label>
-      <input type="range" id="autoJaSec" min="1" max="10" step="1" value="${autoSec("autoJaSec")}" style="width:100%"></div>
-    <div class="field"><label>次のカードまで（${autoSec("autoNextSec")} 秒）</label>
-      <input type="range" id="autoNextSec" min="1" max="10" step="1" value="${autoSec("autoNextSec")}" style="width:100%"></div>
-    <div class="toggle-row">
-      <div class="t-main"><div class="t-title">意味・例文が多い単語は長く待つ</div>
-      <div class="t-sub">意味が2つ目から1つごと、読み上げない例文1つごとに秒数を足します（最大＋10秒）</div></div>
-      <button class="switch ${SETTINGS.autoScale!==false?'on':''}" id="autoScaleSwitch"></button>
-    </div>
-    <div class="field" id="autoPerBox" style="${SETTINGS.autoScale===false?"display:none":""}"><label>1つごとに足す秒数（＋${(+SETTINGS.autoPerItem||1).toFixed(1)} 秒）</label>
-      <input type="range" id="autoPerItem" min="0.5" max="3" step="0.5" value="${+SETTINGS.autoPerItem||1}" style="width:100%"></div>
-    <div class="toggle-row">
-      <div class="t-main"><div class="t-title">日本語も読み上げる</div>
-      <div class="t-sub">意味を日本語の声で読みます。オフにすると表示だけ</div></div>
-      <button class="switch ${SETTINGS.autoReadJa!==false?'on':''}" id="autoJaSwitch"></button>
-    </div>
-    <div class="toggle-row">
-      <div class="t-main"><div class="t-title">例文と訳も読み上げる</div>
-      <div class="t-sub">単語と意味のあとに、例文（英語）→ 訳（日本語）の順で読みます。カードで「例文 1つ」にしているときは1つだけ</div></div>
-      <button class="switch ${SETTINGS.autoReadEx?'on':''}" id="autoExSwitch"></button>
-    </div>
-
-    <div class="divider"><span>Data</span></div>
+    </details>
+    </section>
+    <section class="set-page" data-page="data" style="${settingsPage==="data"?"":"display:none"}">
+<div class="set-h">教材</div>
     <div class="list">
       <button class="row" id="library"><div class="row-main"><div class="row-title">教材を管理する</div>
         <div class="row-sub">${LIBRARY.length} 教材 · 計 ${QUESTIONS.length} 問</div></div><div class="row-arrow">→</div></button>
       <button class="row" id="imp"><div class="row-main"><div class="row-title">教材を読み込む（追加）</div>
-        <div class="row-sub">CSV / Excel(xlsx) · ファイル名が教材名になります</div></div><div class="row-arrow">→</div></button>
+        <div class="row-sub">CSV / Excel(xlsx) · ファイル名が教材名に（複数の教材が入ったCSVは教材ごと）</div></div><div class="row-arrow">→</div></button>
       <button class="row" id="exp"><div class="row-main"><div class="row-title">全教材を書き出す</div>
         <div class="row-sub">すべての問題をまとめてCSVで保存</div></div><div class="row-arrow">→</div></button>
       <button class="row" id="edit"><div class="row-main"><div class="row-title">問題を編集する</div>
         <div class="row-sub">単語・意味・例文をアプリ内で修正</div></div><div class="row-arrow">→</div></button>
     </div>
 
-    <div class="divider"><span>Backup</span></div>
+    <div class="set-h">バックアップ</div>
     <div class="list">
       <button class="row" id="bkup"><div class="row-main"><div class="row-title">学習記録をバックアップ</div>
         <div class="row-sub">習熟度・履歴・要復習・設定をまとめてファイルに保存</div></div><div class="row-arrow">↓</div></button>
@@ -4361,15 +4507,20 @@ function renderSettings(){
     </div>
     <p style="color:var(--sub);font-size:11px;line-height:1.6;margin:2px 2px 0">アプリ更新やデータ消去に備え、ときどき書き出しておくと安心です。ファイルは端末内に保存され、外部には送信されません。</p>
 
-    <div class="divider"><span>Danger Zone</span></div>
+    <details class="set-more danger"><summary>リセット（注意）</summary>
     <div class="list">
       <button class="row" id="resetProg"><div class="row-main"><div class="row-title" style="color:var(--red)">学習記録をリセット</div>
         <div class="row-sub">習熟度・履歴をすべて消去（問題は残ります）</div></div></button>
       <button class="row" id="resetData"><div class="row-main"><div class="row-title" style="color:var(--red)">問題データを初期化</div>
         <div class="row-sub">読み込んだデータを破棄して初期サンプルに戻す</div></div></button>
     </div>
+    </details>
+    
+    </section>
     <p style="text-align:center;color:var(--sub);font-size:10.5px;letter-spacing:1.5px;margin-top:26px;font-family:'Archivo'">VOCAB · PHASE 2</p>`;
 
+  const sb=$("#setBack");if(sb)sb.onclick=()=>{renderSettingsRoot();window.scrollTo(0,0);};
+  document.querySelectorAll("[data-setpage]").forEach(r=>r.onclick=()=>{renderSettings(r.dataset.setpage);window.scrollTo(0,0);});
   $("#goalDate").onchange=async e=>{SETTINGS.goalDate=e.target.value;await DB.put("kv","settings",SETTINGS);toast("目標日を保存しました");};
   $("#goalScope").onclick=renderGoalScope;
   // スイッチ共通：押したらすぐ見た目を切り替え、保存はそのあと。
