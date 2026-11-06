@@ -345,6 +345,55 @@
   .col{color:var(--blue);}
   .ng{color:#c07a76;opacity:.85;font-size:.92em;}
   .flash-card .fc-ex .col{color:#8cc4ff;}
+  .ml-hint{font-size:11px;color:var(--sub);line-height:1.6;margin:-4px 2px 10px;}
+  .ml-books{display:flex;flex-direction:column;gap:8px;}
+  .ml-book{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden;}
+  .ml-book-head{display:flex;align-items:center;gap:8px;padding:6px 10px 6px 4px;}
+  .ml-open{flex:1;min-width:0;display:flex;align-items:center;gap:8px;background:none;border:none;color:var(--ink);
+    padding:8px 6px;text-align:left;font-family:'Noto Sans JP',sans-serif;cursor:pointer;}
+  .ml-arrow{color:var(--sub);font-size:12px;width:12px;flex:none;}
+  .ml-bname{font-size:14px;font-weight:700;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .ml-bsum{font-size:11px;color:var(--gold);flex:none;margin-left:auto;}
+  .ml-whole{flex:none;margin:0;}
+  .ml-book-body{padding:2px 12px 12px;border-top:1px solid var(--line);}
+  .ml-sec{padding-top:10px;}
+  .ml-sec.covered{opacity:.45;}
+  .ml-sec-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .ml-sec-head .filter-chip{margin:0;}
+  .ml-sec-head small{opacity:.6;font-size:10px;margin-left:2px;}
+  .ml-thopen{background:none;border:none;color:var(--sub);font-size:12px;cursor:pointer;padding:4px;font-family:'Noto Sans JP',sans-serif;}
+  .ml-themes{margin:8px 0 2px 12px;padding-left:10px;border-left:2px solid var(--line);}
+  .ml-more{width:100%;margin-top:16px;background:none;border:1px dashed var(--line);border-radius:12px;color:var(--sub);
+    padding:11px;font-size:13px;font-family:'Noto Sans JP',sans-serif;cursor:pointer;text-align:left;}
+  .ml-more b{color:#0c0d10;background:var(--gold);border-radius:99px;padding:0 7px;margin-left:6px;font-size:11px;}
+  .ml-sub{font-size:11px;color:var(--sub);margin:12px 2px 6px;}
+  .ml-preview{margin-top:18px;font-size:14px;color:var(--sub);}
+  .ml-preview b{color:var(--ink);font-size:18px;}
+  .start-pos{display:flex;align-items:center;gap:8px;}
+  .start-pos input{width:76px;text-align:center;background:var(--panel);border:1px solid var(--line);color:var(--ink);
+    border-radius:10px;padding:9px 6px;font-size:16px;font-family:'Archivo',sans-serif;}
+  .sp-btn{width:38px;height:38px;flex:none;border-radius:10px;background:var(--panel);border:1px solid var(--line);color:var(--ink);font-size:18px;cursor:pointer;}
+  .sp-word{flex:1;min-width:0;font-size:13px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .sp-range{width:100%;margin-top:12px;}
+  .meta-jump{background:none;border:none;padding:0;color:inherit;font:inherit;letter-spacing:inherit;cursor:pointer;
+    border-bottom:1px dashed var(--sub);}
+  .jump-box{margin-top:10px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:6px 12px 12px;}
+  .jump-row{display:flex;align-items:center;gap:8px;margin-top:8px;}
+  .jump-lbl{flex:1;min-width:0;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .jump-row .btn{width:auto;margin:0;padding:9px 16px;flex:none;}
+  .split-preview{margin-top:14px;font-size:13px;color:var(--sub);}
+  .split-list{display:flex;flex-direction:column;gap:10px;margin-top:14px;}
+  .split-row{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:13px 14px;}
+  .split-row.is-next{border-color:var(--gold);}
+  .split-row.done{opacity:.72;}
+  .split-title{font-size:15px;font-weight:700;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .split-title small{font-weight:400;color:var(--sub);font-size:12px;}
+  .split-next{font-size:11px;color:#0c0d10;background:var(--gold);border-radius:99px;padding:2px 8px;font-weight:700;}
+  .split-done{font-size:11px;color:var(--green);border:1px solid var(--green);border-radius:99px;padding:1px 7px;}
+  .split-meta{font-size:12px;color:var(--sub);margin-top:4px;}
+  .split-btns{display:flex;gap:8px;}
+  .split-btns .btn{flex:1;margin:0;padding:10px;font-size:13px;}
+  .split-badge{font-size:10px;color:#0c0d10;background:var(--gold);border-radius:99px;padding:1px 7px;margin-left:4px;vertical-align:1px;}
   .auto-btn{display:inline-flex;align-items:center;gap:4px;background:none;border:1px solid var(--line);color:var(--sub);
     border-radius:10px;padding:8px 11px;font-size:12px;font-family:'Noto Sans JP',sans-serif;cursor:pointer;margin-right:8px;flex:none;}
   .auto-btn svg{width:13px;height:13px;}
@@ -751,8 +800,10 @@ async function migrateThemedSections(){
       const secs=ml.sections||[];let hit=false;
       ml.sections=uniq(secs.map(q=>{const [bk,sec]=q.split("\u241f");
         if(bk===b.name&&renamed.has(sec)){hit=true;const r=renamed.get(sec);
+          // 新しい形式のリストは「セクション＋小テーマ」の範囲として持つ
+          if(ml.v===2){ml.themesQ=uniq([...(ml.themesQ||[]),bk+"\u241f"+r.pre+"\u241f"+r.theme]);return null;}
           ml.themes=uniq([...(ml.themes||[]),r.theme]);return bk+"\u241f"+r.pre;}
-        return q;}));
+        return q;}).filter(q=>q));
     }
   }
   if(any){await syncLibrary();await DB.put("kv","mylists",MYLISTS);}
@@ -2208,7 +2259,7 @@ function renderResult(){
       ${retryN>0?`<button class="btn ghost" id="wrongFlash" style="margin-top:10px">${retryN}語を単語帳でめくる</button>`:""}
       <button class="btn primary" id="menu" style="margin-top:10px">メニューに戻る</button>
     </div>`;
-  requestAnimationFrame(()=>{const a=$("#arc");a.style.transition="stroke-dashoffset 1s cubic-bezier(.2,.8,.3,1)";a.style.strokeDashoffset=off;});
+  requestAnimationFrame(()=>{const a=$("#arc");if(!a)return;a.style.transition="stroke-dashoffset 1s cubic-bezier(.2,.8,.3,1)";a.style.strokeDashoffset=off;});
   if(retryN>0)$("#retry").onclick=()=>startQuiz(shuffle(s.wrong),s.label+" · 復習",s.chosenMode);
   $("#menu").onclick=quitQuiz;
   const wf=$("#wrongFlash");
@@ -2546,13 +2597,14 @@ function bindThemeChips(sel,after){
     upd();after();
   };
 }
-function renderRange(book,sec,preThemes){
+function renderRangeWith(book,sec,keep){renderRange(book,sec,keep.th,keep);}
+function renderRange(book,sec,preThemes,keep){
   const cats=categoriesOf(book,sec);
   const total=itemsOf(book,sec,null).length;
   const themes=themesOf(itemsOf(book,sec,null));
   let selThemes=new Set(preThemes||[]);   // 選択中の小テーマ（空＝全体）
-  let selected=new Set();          // 選択中の品詞（空＝全体）
-  let selStatus=new Set();         // 選択中の習熟度（空＝すべて）複数選択可
+  let selected=new Set(keep?keep.cat:[]);          // 選択中の品詞（空＝全体）
+  let selStatus=new Set(keep?keep.st:[]);         // 選択中の習熟度（空＝すべて）複数選択可
   let limit=0;                     // 0=全部
   const countItems=()=>{
     let base=selected.size===0?itemsOf(book,sec,null):itemsOf(book,sec,null).filter(d=>selected.has(d.category));
@@ -2561,6 +2613,9 @@ function renderRange(book,sec,preThemes){
     return base;
   };
   const statusOpts=[["new","未学習"],["l1","学習中"],["review","つまずき"],["l2","定着中"],["l3","マスター"]];
+  // 分割の保存キー：教材・セクション・しぼり込みの条件ごと
+  const splitKey=()=>["r",book,sec,[...selThemes].sort().join(","),[...selected].sort().join(","),[...selStatus].sort().join(",")].join("\u241f");
+  const splitBadge=()=>Object.keys(SPLITS).some(k=>k.startsWith(["r",book,sec].join("\u241f")+"\u241f"))?` <span class="split-badge">分割中</span>`:"";
   screen.innerHTML=`
     <div class="navbar"><button class="back" id="bk">← セクション</button><div class="nav-title"><b>${esc(sec)}</b></div></div>
     <div class="lt" style="font-size:22px">出題範囲を選ぶ</div>
@@ -2570,7 +2625,7 @@ function renderRange(book,sec,preThemes){
     <div class="grid2" id="catGrid">
       ${cats.map(cat=>{
         const n=itemsOf(book,sec,cat).length;
-        return `<div class="set-card" data-cat="${encodeURIComponent(cat)}">
+        return `<div class="set-card ${selected.has(cat)?"sel":""}" data-cat="${encodeURIComponent(cat)}">
           <div class="chk">✓</div>
           <h4>${esc(cat)}</h4><div class="cnt">${n} 問</div>
           <div class="cat">${TYPE_LABEL[itemsOf(book,sec,cat)[0].type]||""}</div></div>`;}).join("")}
@@ -2579,7 +2634,7 @@ function renderRange(book,sec,preThemes){
     <div class="chips" id="statusChips">
       ${statusOpts.map(([k,lbl])=>{
         const n=itemsOf(book,sec,null).filter(d=>statusKeyOf(d)===k).length;
-        return `<button class="filter-chip ${n?'':'dimchip'}" data-st="${k}">${lbl} ${n}</button>`;}).join("")}
+        return `<button class="filter-chip ${selStatus.has(k)?'on':''} ${n?'':'dimchip'}" data-st="${k}">${lbl} ${n}</button>`;}).join("")}
     </div>
     <div class="divider"><span>出題数</span></div>
     <div class="count-chips" id="countChips">
@@ -2588,6 +2643,7 @@ function renderRange(book,sec,preThemes){
       <div class="count-chip" data-lim="10">10問</div>
     </div>
     <button class="btn primary" id="start" style="margin-top:20px">この範囲で学習（<span id="cnt">${countItems().length}</span>問）</button>
+    <button class="btn ghost" id="split" style="margin-top:10px">分割して少しずつ学習${splitBadge()}</button>
     <button class="btn ghost" id="toFlashSec" style="margin-top:10px">このセクションを単語帳でめくる</button>`;
   $("#bk").onclick=()=>renderSections(book);
   bindThemeChips(selThemes,()=>refresh());
@@ -2614,6 +2670,13 @@ function renderRange(book,sec,preThemes){
     document.querySelectorAll(".count-chip").forEach(x=>x.classList.toggle("on",x===ch));
     refresh();
   });
+  $("#split").onclick=()=>{
+    const stLabel=selStatus.size?" · "+statusOpts.filter(o=>selStatus.has(o[0])).map(o=>o[1]).join("・"):"";
+    const thLabel=selThemes.size?" · "+[...selThemes].join("・"):"";
+    const label=sec+thLabel+(selected.size?" · "+[...selected].join("・"):"")+stLabel;
+    const keep={th:[...selThemes],cat:[...selected],st:[...selStatus]};
+    renderSplit(countItems(),splitKey(),label,()=>renderRangeWith(book,sec,keep),itemsOf(book,sec,null));
+  };
   $("#start").onclick=()=>{
     let base=shuffle(countItems());
     if(limit>0)base=base.slice(0,limit);
@@ -2664,38 +2727,169 @@ function renderSubMode(queue,label,backFn,form,exN,enN){
   document.querySelectorAll(".row[data-m]").forEach(r=>r.onclick=()=>startQuiz(queue,label,r.dataset.m,backFn));
 }
 
-/* ---- MyList: 条件で動的に集める学習リスト ---- */
+/* ---- 分割して学習：多すぎる範囲を 10〜50語ずつに分け、少しずつ覚える ----
+   分けた時点の単語を固定して保存する（覚えて「未学習」でなくなっても、その組の中身は変わらない） */
+let SPLITS={};   // key -> {label,size,order,created,total,chunks:[[wordKey,...],...]}
+async function saveSplits(){try{await DB.put("kv","splits",SPLITS);}catch(e){}}
+// 分けた単語を、元の範囲（同じ教材を優先）から引き当てる
+function splitChunkItems(keys,scope){
+  const pref=new Map(),any=new Map();
+  for(const d of scope||[]){const k=wordKey(d);if(!pref.has(k))pref.set(k,d);}
+  for(const d of QUESTIONS){const k=wordKey(d);if(!any.has(k))any.set(k,d);}
+  return keys.map(k=>pref.get(k)||any.get(k)).filter(Boolean);
+}
+// 組の状態：未学習もつまずきも残っていなければ「済」
+function chunkState(items){
+  const m=masteryOf(items);
+  const left=m.counts[0]+m.counts[1];
+  return {m,left,done:items.length>0&&left===0};
+}
+/* items：分ける単語（しぼり込み後）、key：保存用のキー、scope：引き当て用の範囲 */
+function renderSplit(items,key,label,backFn,scope){
+  sessionReturn=()=>renderSplit(items,key,label,backFn,scope);
+  const plan=SPLITS[key];
+  const self=()=>renderSplit(items,key,label,backFn,scope);
+  if(!plan){
+    let size=SETTINGS.splitSize||20,order=SETTINGS.splitOrder||"book";
+    const draw=()=>{
+      const n=items.length,groups=Math.ceil(n/size);
+      screen.innerHTML=`
+        <div class="navbar"><button class="back" id="bk">← 戻る</button><div class="nav-title"><b>${esc(label)}</b></div></div>
+        <div class="lt" style="font-size:22px">分割して学習</div>
+        <div class="lt-sub">${n} 語を少しずつに分けて、1組ずつ覚えます。分けた単語は固定され、覚えて状態が変わっても組の中身は変わりません。</div>
+        <div class="divider"><span>1組の語数</span></div>
+        <div class="count-chips" id="sizeChips">${[10,20,30,50].map(v=>`<div class="count-chip ${v===size?'on':''}" data-sz="${v}">${v}語</div>`).join("")}</div>
+        <div class="divider"><span>並び</span></div>
+        <div class="flash-toolbar">
+          <button class="flash-toggle ${order==='book'?'on':''}" data-od="book">教材の順</button>
+          <button class="flash-toggle ${order==='random'?'on':''}" data-od="random">ランダム</button>
+        </div>
+        <div class="split-preview">${groups} 組に分かれます（${size}語 × ${Math.floor(n/size)}組${n%size?` ＋ ${n%size}語`:""}）</div>
+        <button class="btn primary" id="mk" style="margin-top:18px">${groups} 組に分ける</button>`;
+      $("#bk").onclick=backFn;
+      document.querySelectorAll("[data-sz]").forEach(c=>c.onclick=()=>{size=+c.dataset.sz;draw();});
+      document.querySelectorAll("[data-od]").forEach(c=>c.onclick=()=>{order=c.dataset.od;draw();});
+      $("#mk").onclick=async()=>{
+        if(!items.length){toast("対象がありません");return;}
+        const keys=uniq((order==="random"?shuffle(items.slice()):items).map(wordKey));
+        const chunks=[];for(let i=0;i<keys.length;i+=size)chunks.push(keys.slice(i,i+size));
+        SPLITS[key]={label,size,order,created:Date.now(),total:keys.length,chunks};
+        SETTINGS.splitSize=size;SETTINGS.splitOrder=order;DB.put("kv","settings",SETTINGS);
+        await saveSplits();self();
+      };
+    };
+    draw();return;
+  }
+  // 分けた組の一覧
+  const groups=plan.chunks.map(ks=>splitChunkItems(ks,scope));
+  const states=groups.map(chunkState);
+  const next=states.findIndex(s=>!s.done);
+  const doneN=states.filter(s=>s.done).length;
+  screen.innerHTML=`
+    <div class="navbar"><button class="back" id="bk">← 戻る</button><div class="nav-title"><b>${esc(label)}</b></div></div>
+    <div class="lt" style="font-size:22px">分割して学習</div>
+    <div class="lt-sub">${plan.total} 語を ${plan.size} 語ずつ・${plan.chunks.length} 組（${plan.order==="random"?"ランダム":"教材の順"}）。済 ${doneN} / ${plan.chunks.length} 組</div>
+    <div class="split-list">
+      ${groups.map((its,i)=>{const st=states[i];
+        const a=i*plan.size+1,b=i*plan.size+its.length;
+        return `<div class="split-row ${st.done?"done":""} ${i===next?"is-next":""}">
+          <div class="split-head">
+            <div class="split-title">${i+1}組目 <small>${a}〜${b}</small>${i===next?`<span class="split-next">次はここ</span>`:""}${st.done?`<span class="split-done">✓ 済</span>`:""}</div>
+            <div class="split-meta">${its.length}語 · 未学習 ${st.m.counts[0]} · つまずき ${st.m.counts[1]} · <b style="color:${pctColorOf(st.m.pct)}">${st.m.pct}%</b></div>
+          </div>
+          ${masteryBarHTML(st.m.counts,"height:6px;margin:8px 0 10px")}
+          <div class="split-btns">
+            <button class="btn ghost sm" data-fl="${i}">めくる</button>
+            <button class="btn primary sm" data-qz="${i}">学習する</button>
+          </div>
+        </div>`;}).join("")}
+    </div>
+    <button class="btn ghost" id="redo" style="margin-top:16px">分け直す（今の条件の ${items.length} 語で）</button>
+    <button class="btn ghost" id="del" style="margin-top:10px;color:var(--red);border-color:var(--red)">分割をやめる</button>`;
+  $("#bk").onclick=backFn;
+  document.querySelectorAll("[data-qz]").forEach(b=>b.onclick=()=>{
+    const i=+b.dataset.qz;const its=groups[i];
+    if(!its.length){toast("この組の単語が見つかりません");return;}
+    goTab("study",()=>renderFormSelect(shuffle(its.slice()),`${label} · ${i+1}組目`,self));
+  });
+  document.querySelectorAll("[data-fl]").forEach(b=>b.onclick=()=>{
+    const i=+b.dataset.fl;const its=groups[i];
+    if(!its.length){toast("この組の単語が見つかりません");return;}
+    goTab("myvocab",()=>startFlash(its,`${label} · ${i+1}組目`,"en2ja",()=>goTab("study",self)));
+  });
+  $("#redo").onclick=async()=>{
+    if(!confirm("今の条件で分け直します。今の組分けは消えます（習熟度は残ります）。"))return;
+    delete SPLITS[key];await saveSplits();self();
+  };
+  $("#del").onclick=async()=>{
+    if(!confirm("この分割をやめますか？（習熟度は残ります）"))return;
+    delete SPLITS[key];await saveSplits();backFn();
+  };
+}
+
+/* ---- MyList: 条件で動的に集める学習リスト ----
+   範囲（教材まるごと・セクション・小テーマ）はどれかに入っていれば対象（OR）。
+   習熟度・品詞・形式・タグは、さらにしぼる条件（AND）。 */
+const ML_SEP="␟";
 function allCategories(){return uniq(QUESTIONS.map(d=>d.category));}
-function mylistItems(ml){
-  const secs=ml.sections||[];
-  const stats=ml.statuses||[];
+// 古い形式（教材 AND セクション）を新しい形式（範囲は OR）に直す
+function migrateMylist(ml){
+  if(ml.v===2)return ml;
+  ml.books=ml.books||[];ml.sections=ml.sections||[];
+  if(ml.sections.length){
+    ml.sections=ml.sections.filter(q=>!ml.books.length||ml.books.includes(q.split(ML_SEP)[0]));
+    ml.books=[];
+  }
+  ml.themesQ=ml.themesQ||[];ml.cats=ml.cats||[];ml.types=ml.types||[];ml.statuses=ml.statuses||[];ml.tags=ml.tags||[];
+  ml.v=2;return ml;
+}
+function mylistInScope(ml,d){
+  const bs=ml.books||[],ss=ml.sections||[],ts=ml.themesQ||[];
+  if(!bs.length&&!ss.length&&!ts.length)return true;
+  return bs.includes(d.book)||ss.includes(d.book+ML_SEP+d.section)||ts.includes(d.book+ML_SEP+d.section+ML_SEP+(d.theme||""));
+}
+function mylistItems(ml,noStatus){
+  migrateMylist(ml);
+  const stats=noStatus?[]:(ml.statuses||[]);
   const tags=ml.tags||[];
   return QUESTIONS.filter(d=>
-    (!ml.books.length||ml.books.includes(d.book))&&
-    (!secs.length||secs.includes(d.book+"\u241f"+d.section))&&
+    mylistInScope(ml,d)&&
     (!ml.cats.length||ml.cats.includes(d.category))&&
     (!tags.length||tags.includes(d.tag||""))&&
-    (!(ml.themes||[]).length||ml.themes.includes(d.theme||""))&&
+    (!(ml.themes||[]).length||ml.themes.includes(d.theme||""))&&   // 旧形式の小テーマ条件
     (!ml.types.length||ml.types.includes(d.type))&&
     (!stats.length||stats.includes(statusKeyOf(d))));
 }
 function allTags(){return uniq(QUESTIONS.map(d=>d.tag).filter(t=>t));}
 async function saveMyLists(){await DB.put("kv","mylists",MYLISTS);}
+const ML_STATUS=[["new","未学習"],["l1","学習中"],["review","つまずき"],["l2","定着中"],["l3","マスター"]];
+// 一覧に出す条件の要約
+function mylistSummary(ml){
+  migrateMylist(ml);
+  const parts=[];
+  const byBook={};
+  for(const b of ml.books)byBook[b]="全体";
+  const cnt=(q,i)=>{const b=q.split(ML_SEP)[0];if(byBook[b]==="全体")return;byBook[b]=byBook[b]||{s:0,t:0};byBook[b][i]++;};
+  ml.sections.forEach(q=>cnt(q,"s"));(ml.themesQ||[]).forEach(q=>cnt(q,"t"));
+  const order=booksList();
+  const ents=Object.entries(byBook).sort((x,y)=>order.indexOf(x[0])-order.indexOf(y[0]));   // 教材の並び順で
+  for(const [b,v] of ents)parts.push(v==="全体"?b:`${b}（${[v.s?v.s+"セクション":"",v.t?v.t+"小テーマ":""].filter(x=>x).join("・")}）`);
+  const stMap=Object.fromEntries(ML_STATUS);
+  parts.push(...(ml.statuses||[]).map(s=>stMap[s]||s),...(ml.cats||[]),...((ml.types||[]).map(t=>TYPE_LABEL[t]||t)),...(ml.tags||[]));
+  return parts.join("・")||"全教材";
+}
 function renderMyLists(){
   sessionReturn=renderMyLists;
   screen.innerHTML=`
     <div class="navbar"><button class="back" id="bk">← 学習</button><div class="nav-title"><b>マイリスト</b></div></div>
     <div class="lt" style="font-size:22px">マイリスト学習</div>
-    <div class="lt-sub">教材・セクション・品詞・形式の条件で範囲を定義します。教材を追加すると、条件に合う問題が自動で増えます。</div>
+    <div class="lt-sub">教材・セクション・小テーマを組み合わせて範囲を作り、習熟度などでしぼれます。教材に単語を足すと、条件に合うものは自動で増えます。</div>
     ${MYLISTS.length?`<div class="list">
-      ${MYLISTS.map((ml,i)=>{const n=mylistItems(ml).length;
-        const secLabel=(ml.sections&&ml.sections.length)?[`${ml.sections.length}セクション`]:[];
-        const stMap={new:"未学習",l1:"学習中",review:"つまずき",l2:"定着中",l3:"マスター"};
-        const stLabel=(ml.statuses||[]).map(s=>stMap[s]||s);
-        const parts=[...(ml.books||[]),...secLabel,...stLabel,...(ml.cats||[]),...((ml.types||[]).map(t=>TYPE_LABEL[t]||t))];
+      ${MYLISTS.map((ml,i)=>{const its=mylistItems(ml);const m=masteryOf(mylistItems(ml,true));
         return `<button class="row" data-i="${i}">
-          <div class="row-main"><div class="row-title">${esc(ml.name)}</div>
-          <div class="row-sub">${n} 問 · ${parts.join("・")||"全体"}</div></div>
+          <div class="row-main"><div class="row-title">${esc(ml.name)}${SPLITS["m"+ML_SEP+ml.id]?` <span class="split-badge">分割中</span>`:""}</div>
+          <div class="row-sub">${its.length} 問 · ${esc(mylistSummary(ml))}</div>
+          ${masteryBarHTML(m.counts,"height:5px;margin-top:7px")}</div>
           <div class="row-arrow">→</div></button>`;}).join("")}</div>`
     :`<div class="empty">まだマイリストがありません。<br>下のボタンから作成できます。</div>`}
     <button class="btn primary" id="add" style="margin-top:16px">＋ マイリストを作成</button>`;
@@ -2705,72 +2899,153 @@ function renderMyLists(){
 }
 function renderMyListDetail(i){
   const ml=MYLISTS[i];const items=mylistItems(ml);
+  const self=()=>renderMyListDetail(i);
+  sessionReturn=self;
+  const m=masteryOf(mylistItems(ml,true));
+  const spKey="m"+ML_SEP+ml.id;
   screen.innerHTML=`
     <div class="navbar"><button class="back" id="bk">← マイリスト</button><div class="nav-title"><b>${esc(ml.name)}</b></div></div>
     <div class="lt" style="font-size:22px">${esc(ml.name)}</div>
-    <div class="lt-sub">${items.length} 問が条件に合致しています。</div>
+    <div class="lt-sub">${items.length} 問が条件に合っています。<br>${esc(mylistSummary(ml))}</div>
+    ${masteryBarHTML(m.counts,"height:7px;margin:4px 0 16px")}
     <button class="btn primary" id="study">この範囲で学習</button>
+    <button class="btn ghost" id="split" style="margin-top:10px">分割して少しずつ学習${SPLITS[spKey]?` <span class="split-badge">分割中</span>`:""}</button>
+    <button class="btn ghost" id="flash" style="margin-top:10px">単語帳でめくる</button>
     <button class="btn ghost" id="editL" style="margin-top:10px">条件を編集</button>
     <button class="btn ghost" id="delL" style="margin-top:10px;color:var(--red);border-color:var(--red)">削除</button>`;
   $("#bk").onclick=renderMyLists;
   $("#study").onclick=()=>{
     if(!items.length){toast("条件に合う問題がありません");return;}
-    renderFormSelect(shuffle(items),ml.name,()=>renderMyListDetail(i));
+    renderFormSelect(shuffle(items),ml.name,self);
+  };
+  $("#split").onclick=()=>renderSplit(items,spKey,ml.name,self,mylistItems(ml,true));
+  $("#flash").onclick=()=>{
+    if(!items.length){toast("条件に合う問題がありません");return;}
+    goTab("myvocab",()=>renderFlashStart(items,ml.name,()=>goTab("study",self)));
   };
   $("#editL").onclick=()=>renderMyListForm(i);
   $("#delL").onclick=async()=>{if(!confirm("このマイリストを削除しますか？"))return;
+    if(SPLITS[spKey]){delete SPLITS[spKey];saveSplits();}
     MYLISTS.splice(i,1);await saveMyLists();toast("削除しました");renderMyLists();};
 }
 function renderMyListForm(i){
   const isNew=i<0;
-  const ml=isNew?{name:"",books:[],sections:[],cats:[],types:[],statuses:[],tags:[]}:JSON.parse(JSON.stringify(MYLISTS[i]));
-  if(!ml.sections)ml.sections=[];
-  if(!ml.statuses)ml.statuses=[];
-  if(!ml.tags)ml.tags=[];
-  const books=booksList(),cats=allCategories(),types=uniq(QUESTIONS.map(d=>d.type));
-  const SEP="\u241f";
-  const statusOpts=[["new","未学習"],["l1","学習中"],["review","つまずき"],["l2","定着中"],["l3","マスター"]];
-  const chipRow=(arr,sel,attr)=>arr.map(v=>`<button class="filter-chip ${sel.includes(v)?'on':''}" data-${attr}="${encodeURIComponent(v)}">${esc(attr==='type'?(TYPE_LABEL[v]||v):v)}</button>`).join("");
-  // sections grouped by book; value is qualified "book␟section"
-  const secChips=()=>books.map(b=>{
-    const secs=sectionsOf(b);
-    return `<div style="font-size:11px;color:var(--sub);margin:8px 0 6px;font-family:'Archivo';letter-spacing:1px">${esc(b)}</div>
-      <div class="chips" style="margin-bottom:6px">${secs.map(sec=>{const q=b+SEP+sec;
-        return `<button class="filter-chip ${ml.sections.includes(q)?'on':''}" data-sec="${encodeURIComponent(q)}">${esc(sec)}</button>`;}).join("")}</div>`;
-  }).join("");
-  screen.innerHTML=`
-    <div class="navbar"><button class="back" id="bk">← 戻る</button><div class="nav-title"><b>${isNew?"新規マイリスト":"条件を編集"}</b></div></div>
-    <div class="field"><label>リスト名</label>
-      <input id="mlName" value="${esc(ml.name)}" placeholder="例：1〜2章の未学習" autocapitalize="off"></div>
-    <div class="divider"><span>教材（未選択で全教材）</span></div>
-    <div class="chips" id="bk_chips">${chipRow(books,ml.books,"book")}</div>
-    <div class="divider"><span>セクション（未選択で全セクション）</span></div>
-    <div id="sec_chips">${secChips()}</div>
-    <div class="divider"><span>習熟度（未選択で全部）</span></div>
-    <div class="chips" id="status_chips">${statusOpts.map(([k,lbl])=>`<button class="filter-chip ${ml.statuses.includes(k)?'on':''}" data-st="${k}">${lbl}</button>`).join("")}</div>
-    ${allTags().length?`<div class="divider"><span>分類タグ（未選択で全部）</span></div>
-    <div class="chips" id="tag_chips">${allTags().map(t=>`<button class="filter-chip ${(ml.tags||[]).includes(t)?'on':''}" data-tg="${encodeURIComponent(t)}">${esc(t)}</button>`).join("")}</div>`:""}
-    <div class="divider"><span>品詞・分類（未選択で全部）</span></div>
-    <div class="chips" id="cat_chips">${chipRow(cats,ml.cats,"cat")}</div>
-    <div class="divider"><span>形式（未選択で全部）</span></div>
-    <div class="chips" id="type_chips">${chipRow(types,ml.types,"type")}</div>
-    <div class="lt-sub" id="preview" style="margin:18px 0 0">条件に合致：${mylistItems(ml).length} 問</div>
-    <p style="color:var(--sub);font-size:11px;line-height:1.6;margin:6px 2px 0">習熟度を条件にすると、学習が進むにつれて中身が変わります（例：「未学習」のリストは覚えるほど減ります）。</p>
-    <button class="btn primary" id="save" style="margin-top:14px">保存する</button>`;
-  $("#bk").onclick=()=>isNew?renderMyLists():renderMyListDetail(i);
-  const refresh=()=>{$("#preview").textContent="条件に合致："+mylistItems(ml).length+" 問";};
-  const toggle=(k,val)=>{const arr=ml[k];const idx=arr.indexOf(val);if(idx>=0)arr.splice(idx,1);else arr.push(val);refresh();};
-  document.querySelectorAll("[data-book]").forEach(c=>c.onclick=()=>{c.classList.toggle("on");toggle("books",decodeURIComponent(c.dataset.book));});
-  document.querySelectorAll("[data-sec]").forEach(c=>c.onclick=()=>{c.classList.toggle("on");toggle("sections",decodeURIComponent(c.dataset.sec));});
-  document.querySelectorAll("[data-st]").forEach(c=>c.onclick=()=>{c.classList.toggle("on");toggle("statuses",c.dataset.st);});
-  document.querySelectorAll("[data-tg]").forEach(c=>c.onclick=()=>{c.classList.toggle("on");toggle("tags",decodeURIComponent(c.dataset.tg));});
-  document.querySelectorAll("[data-cat]").forEach(c=>c.onclick=()=>{c.classList.toggle("on");toggle("cats",decodeURIComponent(c.dataset.cat));});
-  document.querySelectorAll("[data-type]").forEach(c=>c.onclick=()=>{c.classList.toggle("on");toggle("types",decodeURIComponent(c.dataset.type));});
-  $("#save").onclick=async()=>{
-    ml.name=$("#mlName").value.trim()||"無題のリスト";
-    if(isNew){ml.id=Date.now();MYLISTS.push(ml);}else MYLISTS[i]=ml;
-    await saveMyLists();toast("保存しました");renderMyLists();
+  const ml=migrateMylist(isNew?{name:"",books:[],sections:[],themesQ:[],cats:[],types:[],statuses:[],tags:[],v:2}:JSON.parse(JSON.stringify(MYLISTS[i])));
+  const books=booksList();
+  const S=ML_SEP;
+  const openBooks=new Set(books.filter(b=>ml.books.includes(b)||ml.sections.some(q=>q.startsWith(b+S))||ml.themesQ.some(q=>q.startsWith(b+S))));
+  if(books.length===1)openBooks.add(books[0]);
+  const openSecs=new Set(ml.themesQ.map(q=>q.split(S).slice(0,2).join(S)));
+  let moreOpen=!!(ml.cats.length||ml.types.length||ml.tags.length);
+  const bookSummary=b=>{
+    if(ml.books.includes(b))return "全体";
+    const s=ml.sections.filter(q=>q.startsWith(b+S)).length,t=ml.themesQ.filter(q=>q.startsWith(b+S)).length;
+    return [s?s+"セクション":"",t?t+"小テーマ":""].filter(x=>x).join("・")||"";
   };
+  const bookHTML=(b,bi)=>{
+    const whole=ml.books.includes(b);
+    const open=openBooks.has(b);
+    const secs=sectionsOf(b);
+    const n=QUESTIONS.filter(d=>d.book===b).length;
+    return `<div class="ml-book ${open?"open":""}" data-bi="${bi}">
+      <div class="ml-book-head">
+        <button class="ml-open" data-open="${bi}"><span class="ml-arrow">${open?"▾":"▸"}</span><span class="ml-bname">${esc(b)}</span>
+          <span class="ml-bsum">${esc(bookSummary(b))||`${n}語`}</span></button>
+        <button class="filter-chip ml-whole ${whole?"on":""}" data-whole="${bi}">全体</button>
+      </div>
+      <div class="ml-book-body" style="${open?"":"display:none"}">
+        ${(()=>{
+          // 小テーマのないセクションは横に並べて詰め、小テーマのあるセクションは1行ずつ（その下に小テーマを開く）
+          let h="",run=[];
+          const chip=(q,sec,n,on)=>`<button class="filter-chip ${on?"on":""}" data-sec="${encodeURIComponent(q)}">${esc(sec)} <small>${n}</small></button>`;
+          const flush=()=>{if(run.length){h+=`<div class="ml-sec ${whole?"covered":""}"><div class="ml-sec-head">${run.join("")}</div></div>`;run=[];}};
+          for(const sec of secs){
+            const q=b+S+sec;const on=ml.sections.includes(q);
+            const its=QUESTIONS.filter(d=>d.book===b&&d.section===sec);
+            const ths=themesOf(its);
+            if(!ths.length){run.push(chip(q,sec,its.length,on));continue;}
+            flush();
+            const so=openSecs.has(q);
+            const tsel=ml.themesQ.filter(x=>x.startsWith(q+S)).length;
+            h+=`<div class="ml-sec ${whole?"covered":""}">
+              <div class="ml-sec-head">${chip(q,sec,its.length,on)}
+                <button class="ml-thopen" data-thopen="${encodeURIComponent(q)}">小テーマ ${ths.length}${tsel?`（${tsel}）`:""} ${so?"▴":"▾"}</button>
+              </div>
+              <div class="chips ml-themes" style="${so?"":"display:none"}">${ths.map(t=>{const tq=q+S+t;
+                return `<button class="filter-chip ${ml.themesQ.includes(tq)?"on":""}" data-thq="${encodeURIComponent(tq)}">${esc(t)}</button>`;}).join("")}</div>
+            </div>`;
+          }
+          flush();return h;
+        })()}
+      </div>
+    </div>`;
+  };
+  const scoped=()=>mylistItems({...ml,cats:[],types:[],tags:[],statuses:[]});
+  const draw=()=>{
+    const sc=scoped();
+    const cats=uniq(sc.map(d=>d.category)).filter(c=>c);
+    const types=uniq(sc.map(d=>d.type));
+    const tags=uniq(sc.map(d=>d.tag).filter(t=>t));
+    const chipRow=(arr,sel,attr,lab)=>arr.map(v=>`<button class="filter-chip ${sel.includes(v)?'on':''}" data-${attr}="${encodeURIComponent(v)}">${esc(lab?lab(v):v)}</button>`).join("");
+    const y=window.scrollY;
+    screen.innerHTML=`
+      <div class="navbar"><button class="back" id="bk">← 戻る</button><div class="nav-title"><b>${isNew?"新規マイリスト":"条件を編集"}</b></div></div>
+      <div class="field"><label>リスト名</label>
+        <input id="mlName" value="${esc(ml.name)}" placeholder="例：Part 1 の感謝・謝罪と依頼" autocapitalize="off"></div>
+      <div class="divider"><span>範囲（未選択で全教材）</span></div>
+      <p class="ml-hint">教材の「全体」、またはセクション・小テーマを選びます。選んだものはすべて合わせて1つのリストになります。</p>
+      <div class="ml-books">${books.map(bookHTML).join("")}</div>
+      <div class="divider"><span>習熟度でしぼる（未選択で全部）</span></div>
+      <div class="chips" id="status_chips">${ML_STATUS.map(([k,lbl])=>`<button class="filter-chip ${ml.statuses.includes(k)?'on':''}" data-st="${k}">${lbl}</button>`).join("")}</div>
+      <button class="ml-more" id="more">その他の条件（品詞・形式${tags.length?"・タグ":""}）${(ml.cats.length+ml.types.length+ml.tags.length)?`<b>${ml.cats.length+ml.types.length+ml.tags.length}</b>`:""} ${moreOpen?"▴":"▾"}</button>
+      <div id="moreBox" style="${moreOpen?"":"display:none"}">
+        ${cats.length>1?`<div class="ml-sub">品詞・分類</div><div class="chips">${chipRow(cats,ml.cats,"cat")}</div>`:""}
+        ${types.length>1?`<div class="ml-sub">形式</div><div class="chips">${chipRow(types,ml.types,"type",t=>TYPE_LABEL[t]||t)}</div>`:""}
+        ${tags.length?`<div class="ml-sub">分類タグ</div><div class="chips">${chipRow(tags,ml.tags,"tg")}</div>`:""}
+        ${cats.length<=1&&types.length<=1&&!tags.length?`<div class="ml-sub">この範囲には、しぼれる品詞・形式がありません</div>`:""}
+      </div>
+      <div class="ml-preview" id="preview"></div>
+      <p style="color:var(--sub);font-size:11px;line-height:1.6;margin:6px 2px 0">習熟度を条件にすると、学習が進むにつれて中身が変わります（例：「未学習」のリストは覚えるほど減ります）。</p>
+      <button class="btn primary" id="save" style="margin-top:14px">保存する</button>`;
+    window.scrollTo(0,y);
+    bind();refresh();
+  };
+  const refresh=()=>{
+    const n=mylistItems(ml).length;
+    const p=$("#preview");if(p)p.innerHTML=`条件に合う単語：<b>${n}</b> 語`;
+  };
+  const toggle=(arr,val)=>{const k=arr.indexOf(val);if(k>=0)arr.splice(k,1);else arr.push(val);};
+  const bind=()=>{
+    $("#bk").onclick=()=>isNew?renderMyLists():renderMyListDetail(i);
+    $("#mlName").oninput=e=>{ml.name=e.target.value;};
+    document.querySelectorAll("[data-open]").forEach(b=>b.onclick=()=>{
+      const bk=books[+b.dataset.open];
+      if(openBooks.has(bk))openBooks.delete(bk);else openBooks.add(bk);
+      const box=b.closest(".ml-book");const open=openBooks.has(bk);
+      box.classList.toggle("open",open);box.querySelector(".ml-book-body").style.display=open?"":"none";
+      b.querySelector(".ml-arrow").textContent=open?"▾":"▸";
+    });
+    document.querySelectorAll("[data-whole]").forEach(b=>b.onclick=()=>{toggle(ml.books,books[+b.dataset.whole]);draw();});
+    document.querySelectorAll("[data-sec]").forEach(b=>b.onclick=()=>{toggle(ml.sections,decodeURIComponent(b.dataset.sec));draw();});
+    document.querySelectorAll("[data-thq]").forEach(b=>b.onclick=()=>{toggle(ml.themesQ,decodeURIComponent(b.dataset.thq));draw();});
+    document.querySelectorAll("[data-thopen]").forEach(b=>b.onclick=()=>{
+      const q=decodeURIComponent(b.dataset.thopen);
+      if(openSecs.has(q))openSecs.delete(q);else openSecs.add(q);
+      const box=b.closest(".ml-sec").querySelector(".ml-themes");const so=openSecs.has(q);
+      box.style.display=so?"":"none";b.textContent=b.textContent.replace(/[▴▾]$/,so?"▴":"▾");
+    });
+    document.querySelectorAll("[data-st]").forEach(c=>c.onclick=()=>{c.classList.toggle("on");toggle(ml.statuses,c.dataset.st);refresh();});
+    document.querySelectorAll("[data-cat]").forEach(c=>c.onclick=()=>{toggle(ml.cats,decodeURIComponent(c.dataset.cat));draw();});
+    document.querySelectorAll("[data-type]").forEach(c=>c.onclick=()=>{toggle(ml.types,decodeURIComponent(c.dataset.type));draw();});
+    document.querySelectorAll("[data-tg]").forEach(c=>c.onclick=()=>{toggle(ml.tags,decodeURIComponent(c.dataset.tg));draw();});
+    $("#more").onclick=()=>{moreOpen=!moreOpen;draw();};
+    $("#save").onclick=async()=>{
+      ml.name=$("#mlName").value.trim()||"無題のリスト";
+      if(isNew){ml.id=Date.now();MYLISTS.push(ml);}else MYLISTS[i]=ml;
+      await saveMyLists();toast("保存しました");renderMyLists();
+    };
+  };
+  draw();
 }
 
 /* ---- My Vocabulary（マイ単語帳）— 自分で育てる辞書。学習・検索に合流 ---- */
@@ -3231,6 +3506,7 @@ function renderFlashStart(items,label,backFn){
   let selCats=new Set();      // 選択した品詞（空＝全部）
   let selStatus=new Set();    // 選択中の習熟度（空＝すべて）複数選択可
   let dir="en2ja";
+  let startAt=1;              // 何番目から始めるか
   const statusOpts=[["new","未学習"],["l1","学習中"],["review","つまずき"],["l2","定着中"],["l3","マスター"]];
   const pool=()=>{
     let base=items.slice();    // 固定順（登録順・教材順、シャッフルしない）
@@ -3258,31 +3534,55 @@ function renderFlashStart(items,label,backFn){
         <button class="flash-toggle ${dir==='en2ja'?'on':''}" id="dirEnJa">英 → 日</button>
         <button class="flash-toggle ${dir==='ja2en'?'on':''}" id="dirJaEn">日 → 英</button>
       </div>
-      <button class="btn primary" id="start" style="margin-top:20px">めくり始める（<span id="cnt">${pool().length}</span>枚）</button>`;
+      <div class="divider"><span>始める番号</span></div>
+      <div class="start-pos">
+        <button class="sp-btn" id="spMinus" aria-label="1つ前">−</button>
+        <input type="number" id="spNum" inputmode="numeric" min="1" value="${startAt}">
+        <button class="sp-btn" id="spPlus" aria-label="1つ後">＋</button>
+        <span class="sp-word" id="spWord"></span>
+      </div>
+      <input type="range" id="spRange" min="1" max="1" value="${startAt}" class="sp-range">
+      <button class="btn primary" id="start" style="margin-top:20px">めくり始める（<span id="cnt">${pool().length}</span>枚<span id="cntFrom"></span>）</button>`;
     $("#bk").onclick=backFn;
-    bindThemeChips(selThemes,()=>{$("#cnt").textContent=pool().length;});
+    // 始める番号：数字・−＋・スライダーのどれでも。今の条件の何番目の単語かを表示
+    const syncPos=v=>{
+      const p=pool(),n=Math.max(1,p.length);
+      startAt=Math.min(n,Math.max(1,Math.round(+v||1)));
+      $("#spNum").value=startAt;$("#spNum").max=n;
+      const r=$("#spRange");r.max=n;r.value=startAt;r.disabled=p.length<=1;
+      $("#spWord").textContent=p.length?`/ ${p.length}　${p[startAt-1].question}`:"";
+      $("#cntFrom").textContent=startAt>1?`・${startAt}番から`:"";
+      $("#cnt").textContent=p.length;
+    };
+    syncPos(startAt);
+    $("#spNum").onchange=e=>syncPos(e.target.value);
+    $("#spRange").oninput=e=>syncPos(e.target.value);
+    $("#spMinus").onclick=()=>syncPos(startAt-1);
+    $("#spPlus").onclick=()=>syncPos(startAt+1);
+    bindThemeChips(selThemes,()=>syncPos(startAt));
     $("#dirEnJa").onclick=()=>{dir="en2ja";draw();};
     $("#dirJaEn").onclick=()=>{dir="ja2en";draw();};
     document.querySelectorAll("[data-st]").forEach(ch=>ch.onclick=()=>{
       const k=ch.dataset.st;
       if(selStatus.has(k))selStatus.delete(k);else selStatus.add(k);
       ch.classList.toggle("on");
-      $("#cnt").textContent=pool().length;});
+      syncPos(startAt);});
     document.querySelectorAll("[data-c]").forEach(ch=>ch.onclick=()=>{
       const c=decodeURIComponent(ch.dataset.c);if(selCats.has(c))selCats.delete(c);else selCats.add(c);
-      $("#cnt").textContent=pool().length;ch.classList.toggle("on");});
+      ch.classList.toggle("on");syncPos(startAt);});
     $("#start").onclick=()=>{
       const p=pool();
       if(!p.length){toast("対象がありません");return;}
       const stLabel=selStatus.size?" · "+statusOpts.filter(o=>selStatus.has(o[0])).map(o=>o[1]).join("・"):"";
-      startFlash(p,label+stLabel,dir,backFn);   // 固定順のまま
+      startFlash(p,label+stLabel,dir,backFn,{startIdx:startAt-1});   // 固定順のまま
     };
   };
   draw();
 }
 let flashSession=null;
 function startFlash(cards,label,dir,backFn,opts){
-  flashSession={cards,label,dir,backFn,opts:opts||{},idx:0,showEn:true,showJa:false};
+  const st=opts&&opts.startIdx?Math.min(cards.length-1,Math.max(0,opts.startIdx)):0;
+  flashSession={cards,label,dir,backFn,opts:opts||{},idx:st,showEn:true,showJa:false};
   flashFront(flashSession);
   renderFlashCard();
 }
@@ -3336,9 +3636,14 @@ function renderFlashCard(){
       <button class="check-btn ${checked?'on':''}" id="checkBtn" aria-label="チェック">
         <svg viewBox="0 0 24 24" fill="${checked?'currentColor':'none'}" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
       </button></div>
-    <div class="flash-meta"><span class="meta-left">${String(fs.idx+1).padStart(2,'0')} / ${String(fs.cards.length).padStart(2,'0')}${it.theme?`<span class="meta-theme">${esc(it.theme)}</span>`:""}</span>
+    <div class="flash-meta"><span class="meta-left"><button class="meta-jump" id="jumpBtn" aria-label="番号を指定して移動">${String(fs.idx+1).padStart(2,'0')} / ${String(fs.cards.length).padStart(2,'0')}</button>${it.theme?`<span class="meta-theme">${esc(it.theme)}</span>`:""}</span>
       <span class="meta-right">${SETTINGS.flashGauge?statusBadgeShort(it):""}${checked?'<span style="color:var(--gold)">★ チェック中</span>':(SETTINGS.flashGauge?"":"めくり")}</span></div>
     <div class="track"><div style="width:${(fs.idx+1)/fs.cards.length*100}%"></div></div>
+    ${fs.cards.length>1?`<div class="jump-box" id="jumpBox" style="${fs.jumpOpen?"":"display:none"}">
+      <input type="range" id="jumpRange" min="1" max="${fs.cards.length}" value="${fs.idx+1}" class="sp-range">
+      <div class="jump-row"><button class="sp-btn" id="jMinus">−</button><span class="jump-lbl" id="jumpLbl"></span><button class="sp-btn" id="jPlus">＋</button>
+        <button class="btn primary sm" id="jumpGo">移動</button></div>
+    </div>`:""}
     <div style="height:14px"></div>
     <div class="flash-swipe" id="swipeZone">
       <div class="flash-card" id="card">
@@ -3356,6 +3661,22 @@ function renderFlashCard(){
       :fs.cards.length>1?`<button class="flash-bridge" id="fbBridge">この範囲を問題で確認 →</button>`:""}`;
   window.scrollTo(0,0);
   $("#bk").onclick=()=>{stopAutoFlip(fs);flashSession=null;(fs.backFn||renderFlashBooks)();};
+  // 番号を指定して移動
+  const jb=$("#jumpBtn");
+  if(jb&&fs.cards.length>1){
+    let to=fs.idx+1;
+    const lbl=()=>{const c=fs.cards[to-1];$("#jumpLbl").textContent=`${to} / ${fs.cards.length}　${c?c.question:""}`;$("#jumpRange").value=to;};
+    const set=v=>{to=Math.min(fs.cards.length,Math.max(1,Math.round(+v||1)));lbl();};
+    jb.onclick=()=>{fs.jumpOpen=!fs.jumpOpen;$("#jumpBox").style.display=fs.jumpOpen?"":"none";if(fs.jumpOpen)set(fs.idx+1);};
+    if(fs.jumpOpen)lbl();
+    $("#jumpRange").oninput=e=>set(e.target.value);
+    $("#jMinus").onclick=()=>set(to-1);
+    $("#jPlus").onclick=()=>set(to+1);
+    $("#jumpGo").onclick=()=>{
+      fs.jumpOpen=false;fs.idx=to-1;flashFront(fs);
+      if(fs.auto)runAutoFlip(fs);else renderFlashCard();
+    };
+  }
   const af=$("#autoFlip");
   if(af)af.onclick=()=>{if(fs.auto){stopAutoFlip(fs);renderFlashCard();}else startAutoFlip(fs);};
   const fbb=$("#fbBridge");
@@ -3445,6 +3766,14 @@ function jaPrefetch(text){
   const clean=jaSpeechClean(text);if(!clean)return;
   jaCloudVoice().then(v=>v&&ttsGet(clean,v).then(b=>ttsUrlFor(clean,b,v))).catch(()=>{});
 }
+// 意味や例文が多い単語は、そのぶん長く待つ（設定でオン・オフ）
+function autoExtra(it,phase){
+  if(SETTINGS.autoScale===false)return 0;
+  const k=+SETTINGS.autoPerItem||1;
+  let x=Math.max(0,senseTexts(it).length-1)*k;                       // 意味が2つ目から
+  if(phase==="next"&&!SETTINGS.autoReadEx)x+=autoExamples(it).length*k;   // 読み上げない例文は、読む時間を足す
+  return Math.min(10,x);
+}
 function autoExamples(it){
   const all=examplesOf(it);
   return (SETTINGS.flashEx==="all"||!SETTINGS.flashEx)?all:all.slice(0,1);
@@ -3463,7 +3792,7 @@ async function runAutoFlip(fs){
   const sayEn=()=>speakWait(it.question,"en");
   const sayJa=()=>SETTINGS.autoReadJa!==false?speakWait(jaSpeechText(it),"ja"):Promise.resolve();
   await (je?sayJa():sayEn());if(!alive())return;
-  await autoWait(autoSec("autoJaSec"),fs);if(!alive())return;
+  await autoWait(autoSec("autoJaSec")+autoExtra(it,"answer"),fs);if(!alive())return;
   fs.showEn=true;fs.showJa=true;renderFlashCard();
   await (je?sayEn():sayJa());if(!alive())return;
   // 設定で「例文と訳も読む」：表示している例文（すべて／1つ）を、英文 → 訳 の順に
@@ -3477,7 +3806,7 @@ async function runAutoFlip(fs){
         await speakWait(exs[i].ja,"ja");if(!alive())return;}
     }
   }
-  await autoWait(autoSec("autoNextSec"),fs);if(!alive())return;
+  await autoWait(autoSec("autoNextSec")+autoExtra(it,"next"),fs);if(!alive())return;
   if(fs.idx+1>=fs.cards.length){stopAutoFlip(fs);renderFlashDone();return;}
   fs.idx++;
   runAutoFlip(fs);
@@ -3994,6 +4323,13 @@ function renderSettings(){
     <div class="field"><label>次のカードまで（${autoSec("autoNextSec")} 秒）</label>
       <input type="range" id="autoNextSec" min="1" max="10" step="1" value="${autoSec("autoNextSec")}" style="width:100%"></div>
     <div class="toggle-row">
+      <div class="t-main"><div class="t-title">意味・例文が多い単語は長く待つ</div>
+      <div class="t-sub">意味が2つ目から1つごと、読み上げない例文1つごとに秒数を足します（最大＋10秒）</div></div>
+      <button class="switch ${SETTINGS.autoScale!==false?'on':''}" id="autoScaleSwitch"></button>
+    </div>
+    <div class="field" id="autoPerBox" style="${SETTINGS.autoScale===false?"display:none":""}"><label>1つごとに足す秒数（＋${(+SETTINGS.autoPerItem||1).toFixed(1)} 秒）</label>
+      <input type="range" id="autoPerItem" min="0.5" max="3" step="0.5" value="${+SETTINGS.autoPerItem||1}" style="width:100%"></div>
+    <div class="toggle-row">
       <div class="t-main"><div class="t-title">日本語も読み上げる</div>
       <div class="t-sub">意味を日本語の声で読みます。オフにすると表示だけ</div></div>
       <button class="switch ${SETTINGS.autoReadJa!==false?'on':''}" id="autoJaSwitch"></button>
@@ -4173,6 +4509,10 @@ function renderSettings(){
   bindSec("#autoNextSec","autoNextSec","次のカードまで");
   bindSwitch("#autoJaSwitch",()=>(SETTINGS.autoReadJa=!(SETTINGS.autoReadJa!==false)));
   bindSwitch("#autoExSwitch",()=>(SETTINGS.autoReadEx=!SETTINGS.autoReadEx));
+  bindSwitch("#autoScaleSwitch",()=>{SETTINGS.autoScale=!(SETTINGS.autoScale!==false);const b=$("#autoPerBox");if(b)b.style.display=SETTINGS.autoScale?"":"none";return SETTINGS.autoScale;});
+  $("#autoPerItem").oninput=async e=>{SETTINGS.autoPerItem=+e.target.value;
+    e.target.previousElementSibling.textContent=`1つごとに足す秒数（＋${SETTINGS.autoPerItem.toFixed(1)} 秒）`;
+    await DB.put("kv","settings",SETTINGS);};
   bindSec("#choiceSec","choiceSec","四択の制限時間");
   $("#library").onclick=renderLibrary;
   $("#imp").onclick=()=>$("#fileInput").click();
@@ -4186,7 +4526,7 @@ function renderSettings(){
   $("#bkup").onclick=async()=>{
     const backup={
       _format:"vocab-backup",_version:1,_exportedAt:new Date().toISOString(),
-      settings:{...SETTINGS,cloudKey:""},daily:DAILY,mylists:MYLISTS,flash:FLASH,check:CHECK,   // APIキーは書き出さない
+      settings:{...SETTINGS,cloudKey:""},daily:DAILY,mylists:MYLISTS,splits:SPLITS,flash:FLASH,check:CHECK,   // APIキーは書き出さない
       progress:Object.fromEntries(PROG)
     };
     const blob=new Blob([JSON.stringify(backup,null,2)],{type:"application/json"});
@@ -4426,6 +4766,7 @@ $("#restoreInput").addEventListener("change",e=>{
       if(data.settings){const keep=SETTINGS.cloudKey;SETTINGS={...SETTINGS,...data.settings};if(!SETTINGS.cloudKey)SETTINGS.cloudKey=keep;}   // この端末のAPIキーは保持
       DAILY=data.daily||{};
       if(data.mylists)MYLISTS=data.mylists;
+      if(data.splits){SPLITS=data.splits;await saveSplits();}
       if(data.flash)FLASH=data.flash;
       if(data.check){CHECK=data.check;await DB.put("kv","check",CHECK);}
       // 旧バックアップに mywords があれば、教材として取り込む（後方互換）
@@ -4476,6 +4817,7 @@ $("#restoreInput").addEventListener("change",e=>{
     if(typeof SETTINGS.speechRate!=="number")SETTINGS.speechRate=0.92;
     const dl=await DB.get("kv","daily");if(dl)DAILY=dl;
     const ml=await DB.get("kv","mylists");if(ml)MYLISTS=ml;
+    try{const sp=await DB.get("kv","splits");if(sp)SPLITS=sp;}catch(e){}
     const fl=await DB.get("kv","flash");if(fl)FLASH=fl;
     const ck=await DB.get("kv","check");if(ck)CHECK=ck;
     PROG=new Map(await DB.entries("progress"));
